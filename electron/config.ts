@@ -11,7 +11,7 @@ const CONFIG_FILE = path.join(app.getPath('userData'), 'settings.json');
 
 const DEFAULT_CONFIG: AppConfig = {
   dbPath: app.getPath('userData'),
-  mongoUri: '', // Default to empty so they can set it themselves
+  mongoUri: process.env.VITE_MONGO_URI || '', // Default to env or empty
 };
 
 export function getConfig(): AppConfig {
