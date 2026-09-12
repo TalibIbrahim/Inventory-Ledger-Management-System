@@ -26,8 +26,12 @@ jobs:
           
       - name: Install Dependencies
         run: npm install
-        
-      - name: Build and Publish Release
+
+      - name: Compile TypeScript & Vite
+        run: npx tsc -b && npx vite build
+
+      - name: Package & Publish with electron-builder
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build -- --publish always
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish always
