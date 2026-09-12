@@ -1,7 +1,9 @@
 {
   "name": "inventory-management",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Axiom Stock Ledger",
+  "author": "Talib Ibrahim",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -34,7 +36,8 @@
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "identity": null
     }
   },
   "devDependencies": {
