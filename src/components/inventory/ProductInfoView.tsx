@@ -31,7 +31,7 @@ interface ProductInfoViewProps {
   onDeleteProduct: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-const COMMON_BRANDS = ['Siemens', 'Packages Ltd', 'Espressif', 'Pakistan Cables', 'Misumi', 'General'];
+
 const COMMON_TYPES = ['Electronics', 'Industrial Hardware', 'Packaging', 'Electrical', 'Raw Materials'];
 const COMMON_UOMS = ['pcs', 'kg', 'boxes', 'meters', 'rolls', 'liters', 'packs'];
 
@@ -51,8 +51,8 @@ export const ProductInfoView: React.FC<ProductInfoViewProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
-  const [brand, setBrand] = useState(COMMON_BRANDS[0]);
-  const [customBrand, setCustomBrand] = useState('');
+  const [brand, setBrand] = useState('');
+
   const [type, setType] = useState(COMMON_TYPES[0]);
   const [customType, setCustomType] = useState('');
   const [uom, setUom] = useState('pcs');
@@ -71,14 +71,14 @@ export const ProductInfoView: React.FC<ProductInfoViewProps> = ({
   const [deleteError, setDeleteError] = useState('');
 
   // Unique Brands & Types from current products
-  const uniqueBrands = Array.from(new Set([...COMMON_BRANDS, ...products.map((p) => p.brand)])).sort();
+  const uniqueBrands = Array.from(new Set(products.map((p) => p.brand).filter(Boolean))).sort();
   const uniqueTypes = Array.from(new Set([...COMMON_TYPES, ...products.map((p) => p.type)])).sort();
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
-    const resolvedBrand = brand === 'OTHER' ? customBrand.trim() : brand;
+    const resolvedBrand = brand.trim();
     const resolvedType = type === 'OTHER' ? customType.trim() : type;
 
     if (!sku.trim() || !name.trim()) {
@@ -108,7 +108,6 @@ export const ProductInfoView: React.FC<ProductInfoViewProps> = ({
     setIsAddModalOpen(false);
     setSku('');
     setName('');
-    setCustomBrand('');
     setCustomType('');
     setInitialStock('0');
     setPurchasePrice('500');
@@ -482,27 +481,13 @@ export const ProductInfoView: React.FC<ProductInfoViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Brand</label>
-                  <select
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  >
-                    {COMMON_BRANDS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                    <option value="OTHER">Other (Custom Brand)...</option>
-                  </select>
-                  {brand === 'OTHER' && (
                     <input
                       type="text"
-                      placeholder="Enter custom brand name"
-                      value={customBrand}
-                      onChange={(e) => setCustomBrand(e.target.value)}
-                      className="w-full mt-2 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl"
+                      placeholder="e.g. Siemens, ABB, Pakistan Cables"
+                      value={brand}
+                      onChange={(e) => setBrand(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     />
-                  )}
                 </div>
 
                 <div>

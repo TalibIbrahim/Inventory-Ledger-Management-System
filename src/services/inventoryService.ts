@@ -13,32 +13,7 @@ import type {
   StockAdjustmentLine,
   StockLedgerEntry,
 } from '../types/inventory';
-export const DEFAULT_WAREHOUSES: Warehouse[] = [
-  {
-    id: 'wh-01',
-    code: 'WH-KHI-01',
-    name: 'Karachi Central Depot',
-    city: 'Karachi',
-    address: 'Plot 42, Sector 15, Korangi Industrial Area, Karachi',
-    manager: 'Tariq Mehmood',
-  },
-  {
-    id: 'wh-02',
-    code: 'WH-LHE-01',
-    name: 'Lahore Distribution Hub',
-    city: 'Lahore',
-    address: 'Plot 18, Block B, Sundar Industrial Estate, Lahore',
-    manager: 'Usman Ghani',
-  },
-  {
-    id: 'wh-03',
-    code: 'WH-ISB-01',
-    name: 'Islamabad Regional Hub',
-    city: 'Islamabad',
-    address: 'Plot 7, Street 3, I-9/3 Industrial Area, Islamabad',
-    manager: 'Nadeem Akhtar',
-  },
-];
+export const DEFAULT_WAREHOUSES: Warehouse[] = [];
 
 const PRODUCTS_KEY = 'ledger_live_products_v1';
 const WAREHOUSES_KEY = 'ledger_live_warehouses_v1';
@@ -72,10 +47,17 @@ export class InventoryService {
       try {
         this.cache.products = await window.electronAPI.db.find('products');
         this.cache.warehouses = await window.electronAPI.db.find('warehouses');
-        if (this.cache.warehouses.length === 0) {
-          for (const w of DEFAULT_WAREHOUSES) await window.electronAPI.db.insert('warehouses', w);
-          this.cache.warehouses = [...DEFAULT_WAREHOUSES];
+
+        // ─── One-time migration: remove hardcoded seed warehouses ────────────
+        const SEED_IDS = ['wh-01', 'wh-02', 'wh-03'];
+        if (this.cache.warehouses.some((w) => SEED_IDS.includes(w.id))) {
+          await window.electronAPI.db.remove('warehouses', {}, { multi: true });
+          // Re-insert only the non-seed ones (in case user had added real ones too)
+          const realWarehouses = this.cache.warehouses.filter((w) => !SEED_IDS.includes(w.id));
+          for (const w of realWarehouses) await window.electronAPI.db.insert('warehouses', w);
+          this.cache.warehouses = realWarehouses;
         }
+        // ─────────────────────────────────────────────────────────────────────
         this.cache.pv = await window.electronAPI.db.find('purchaseVouchers');
         this.cache.sv = await window.electronAPI.db.find('saleVouchers');
         this.cache.sr = await window.electronAPI.db.find('saleReturns');
@@ -91,7 +73,14 @@ export class InventoryService {
     } else {
       // Fallback to localStorage for browser dev mode
       this.cache.products = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || '[]');
-      this.cache.warehouses = JSON.parse(localStorage.getItem(WAREHOUSES_KEY) || 'null') || DEFAULT_WAREHOUSES;
+      this.cache.warehouses = JSON.parse(localStorage.getItem(WAREHOUSES_KEY) || '[]');
+      // One-time migration: remove hardcoded seed warehouses from localStorage
+      const SEED_IDS_LS = ['wh-01', 'wh-02', 'wh-03'];
+      const hadSeeds = this.cache.warehouses.some((w: Warehouse) => SEED_IDS_LS.includes(w.id));
+      if (hadSeeds) {
+        this.cache.warehouses = this.cache.warehouses.filter((w: Warehouse) => !SEED_IDS_LS.includes(w.id));
+        localStorage.setItem(WAREHOUSES_KEY, JSON.stringify(this.cache.warehouses));
+      }
       this.cache.pv = JSON.parse(localStorage.getItem(PV_KEY) || '[]');
       this.cache.sv = JSON.parse(localStorage.getItem(SV_KEY) || '[]');
       this.cache.sr = JSON.parse(localStorage.getItem(SR_KEY) || '[]');
