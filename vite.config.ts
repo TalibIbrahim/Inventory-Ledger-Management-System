@@ -9,6 +9,13 @@ export default defineConfig({
     electron([
       {
         entry: 'electron/main.ts',
+        vite: {
+          build: {
+            rollupOptions: {
+              external: ['mongodb', '@seald-io/nedb']
+            }
+          }
+        }
       },
       {
         entry: 'electron/preload.ts',

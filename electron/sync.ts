@@ -2,7 +2,14 @@ import { MongoClient } from 'mongodb';
 import { db as collections } from './db';
 import { BrowserWindow } from 'electron';
 
+let currentSyncStatus: 'syncing' | 'synced' | 'error' | 'offline' = 'offline';
+
+export function getSyncStatus() {
+  return currentSyncStatus;
+}
+
 function broadcastSyncStatus(status: 'syncing' | 'synced' | 'error' | 'offline') {
+  currentSyncStatus = status;
   BrowserWindow.getAllWindows().forEach((win) => {
     if (!win.isDestroyed()) {
       win.webContents.send('sync-status', status);

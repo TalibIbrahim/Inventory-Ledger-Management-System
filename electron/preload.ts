@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveConfig: (config: any) => ipcRenderer.invoke('save-config', config),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   restartApp: () => ipcRenderer.invoke('restart-app'),
+  getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
   onSyncStatus: (callback: (status: 'syncing' | 'synced' | 'error' | 'offline') => void) => {
     ipcRenderer.on('sync-status', (_event, status) => callback(status));
   }
