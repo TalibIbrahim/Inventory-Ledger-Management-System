@@ -34,7 +34,7 @@ function createWindow() {
   });
 }
 
-import { startAutoSync, setMongoUri } from './sync';
+import { startAutoSync, setMongoUri, getSyncStatus } from './sync';
 import { getConfig, saveConfig } from './config';
 import { initDb } from './db';
 
@@ -69,6 +69,7 @@ app.on('activate', () => {
 
 // Settings & Config IPC Handlers
 ipcMain.handle('get-config', () => getConfig());
+ipcMain.handle('get-sync-status', () => getSyncStatus());
 
 ipcMain.handle('save-config', (event, newConfig) => {
   return saveConfig(newConfig);

@@ -15,6 +15,7 @@ declare global {
       saveConfig: (config: { dbPath?: string; mongoUri?: string }) => Promise<{ dbPath: string; mongoUri: string }>;
       selectDirectory: () => Promise<string | null>;
       restartApp: () => Promise<void>;
+      getSyncStatus: () => Promise<'syncing' | 'synced' | 'error' | 'offline'>;
       onSyncStatus: (callback: (status: 'syncing' | 'synced' | 'error' | 'offline') => void) => void;
     };
   }

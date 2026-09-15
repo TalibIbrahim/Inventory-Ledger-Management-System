@@ -1,0 +1,248 @@
+
+> inventory-management@1.0.2 electron:dev
+> concurrently -k "cross-env NODE_ENV=development vite" "electron ."
+
+[1] 
+[1] [Sync] Starting auto-sync every 60 seconds.
+[0] [2m12:03:20 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
+[0] 
+[0]   [32m[1mVITE[22m v8.3.0[39m  [2mready in [0m[1m1356[22m[2m[0m ms[22m
+[0] 
+[0]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[0] [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] [2m12:03:26 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] scanning dependencies...
+[0] transforming...
+[0] transforming...
+[0] ✓ 2 modules transformed.
+[0] rendering chunks...
+[0] ✓ 187 modules transformed.
+[0] computing gzip size...
+[0] dist-electron/preload.js  1.11 kB │ gzip: 0.43 kB
+[0] 
+[0] [36mbuilt in 9220ms.[39m
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.49 kB │ gzip: 348.84 kB
+[0] 
+[0] [36mbuilt in 9520ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [7092:0915/120330.563:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [7092:0915/120330.564:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [7092:0915/120330.566:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [7092:0915/120330.566:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [7092:0915/120330.566:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [7092:0915/120330.566:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [7092:0915/120330.567:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [7092:0915/120330.568:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [7092:0915/120330.568:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [2m12:03:31 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] bundling dependencies...
+[0] [2m12:11:07 PM[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[0] [2m12:11:07 PM[22m [36m[1m[vite][22m[39m server restarted.
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 2 modules transformed.
+[0] ✓ 5 modules transformed.
+[0] rendering chunks...
+[0] rendering chunks...
+[0] computing gzip size...
+[0] computing gzip size...
+[0] dist-electron/preload.js  1.11 kB │ gzip: 0.43 kB
+[0] 
+[0] dist-electron/main.js  8.76 kB │ gzip: 2.77 kB
+[0] 
+[0] [36mbuilt in 379ms.[39m
+[0] [36mbuilt in 379ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [21980:0915/121108.479:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21980:0915/121108.498:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21980:0915/121108.498:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21980:0915/121108.533:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21980:0915/121108.534:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21980:0915/121108.534:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21980:0915/121108.548:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21980:0915/121108.548:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21980:0915/121108.548:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] (node:21980) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, open 'C:\Users\talib\AppData\Roaming\inventory-management\saleVouchers.db~'
+[0]     at async Object.open (node:internal/fs/promises:1345:25)
+[0]     at async flushToStorageAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:164:18)
+[0]     at async Object.crashSafeWriteFileLinesAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:246:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:112:5)
+[0]     at async Persistence.loadDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:339:5)
+[0] (Use `electron --trace-warnings ...` to show where the warning was created)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 11)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, open 'C:\Users\talib\AppData\Roaming\inventory-management\stockAdjustments.db~'
+[0]     at async Object.open (node:internal/fs/promises:1345:25)
+[0]     at async flushToStorageAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:164:18)
+[0]     at async Object.crashSafeWriteFileLinesAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:246:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:112:5)
+[0]     at async Persistence.loadDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:339:5)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 14)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, open 'C:\Users\talib\AppData\Roaming\inventory-management\purchaseVouchers.db~'
+[0]     at async Object.open (node:internal/fs/promises:1345:25)
+[0]     at async flushToStorageAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:164:18)
+[0]     at async Object.crashSafeWriteFileLinesAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:246:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:112:5)
+[0]     at async Persistence.loadDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:339:5)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 17)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\openingStocks.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\openingStocks.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:248:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:112:5)
+[0]     at async Persistence.loadDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:339:5)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 20)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\ledger.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\ledger.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:248:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:112:5)
+[0]     at async Persistence.loadDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:339:5)
+[0] (node:21980) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 23)
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 5 modules transformed.
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  8.72 kB │ gzip: 2.76 kB
+[0] 
+[0] [36mbuilt in 92ms.[39m
+[0] ✓ 187 modules transformed.
+[0] 
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.45 kB │ gzip: 348.83 kB
+[0] 
+[0] [36mbuilt in 408ms.[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] 
+[0] ✓ 187 modules transformed.
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.45 kB │ gzip: 348.83 kB
+[0] 
+[0] [36mbuilt in 341ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [16392:0915/121119.829:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [16392:0915/121119.829:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [16392:0915/121119.830:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [16392:0915/121119.831:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [16392:0915/121119.831:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [16392:0915/121119.831:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [16392:0915/121119.831:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [16392:0915/121119.831:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [16392:0915/121119.831:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] (node:16392) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\warehouses.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\warehouses.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32998:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33104:4)
+[0]     at async Persistence.loadDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33298:4)
+[0] (Use `electron --trace-warnings ...` to show where the warning was created)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 10)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, open 'C:\Users\talib\AppData\Roaming\inventory-management\stockAdjustments.db~'
+[0]     at async Object.open (node:internal/fs/promises:1345:25)
+[0]     at async flushToStorageAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32911:17)
+[0]     at async Object.crashSafeWriteFileLinesAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32994:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33104:4)
+[0]     at async Persistence.loadDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33298:4)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 13)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\saleReturns.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\saleReturns.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32998:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33104:4)
+[0]     at async Persistence.loadDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33298:4)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 16)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\products.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\products.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32998:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33104:4)
+[0]     at async Persistence.loadDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33298:4)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 19)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\purchaseVouchers.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\purchaseVouchers.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32998:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33104:4)
+[0]     at async Persistence.loadDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33298:4)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 22)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Error: ENOENT: no such file or directory, rename 'C:\Users\talib\AppData\Roaming\inventory-management\ledger.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\ledger.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:32998:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33104:4)
+[0]     at async Persistence.loadDatabaseAsync (file:///C:/Programming/Inventory%20Management/dist-electron/main.js:33298:4)
+[0] (node:16392) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 25)
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 5 modules transformed.
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  8.94 kB │ gzip: 2.81 kB
+[0] 
+[0] [36mbuilt in 146ms.[39m
+[0] ✓ 187 modules transformed.
+[0] 
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.67 kB │ gzip: 348.88 kB
+[0] 
+[0] [36mbuilt in 519ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [21856:0915/121128.600:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21856:0915/121128.602:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21856:0915/121128.603:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21856:0915/121128.605:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21856:0915/121128.605:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21856:0915/121128.605:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21856:0915/121128.605:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21856:0915/121128.605:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21856:0915/121128.605:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 2 modules transformed.
+[0] ✓ 2 modules transformed.
+[0] rendering chunks...
+[0] rendering chunks...
+[0] computing gzip size...
+[0] computing gzip size...
+[0] dist-electron/preload.js  1.17 kB │ gzip: 0.44 kB
+[0] 
+[0] dist-electron/preload.js  1.17 kB │ gzip: 0.44 kB
+[0] 
+[0] [36mbuilt in 34ms.[39m
+[0] [36mbuilt in 33ms.[39m
+[0] [2m12:11:46 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/Header.tsx[22m
+[0] [2m12:12:02 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m

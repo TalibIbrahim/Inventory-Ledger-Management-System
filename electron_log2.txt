@@ -1,0 +1,198 @@
+
+> inventory-management@1.0.2 electron:dev
+> concurrently -k "cross-env NODE_ENV=development vite" "electron ."
+
+[1] 
+[1] [Sync] Starting auto-sync every 60 seconds.
+[1] [9052:0915/120926.910:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[1] [9052:0915/120926.911:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[1] [9052:0915/120926.911:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[1] [9052:0915/120926.915:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[1] [9052:0915/120926.916:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[1] [9052:0915/120926.916:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[1] [9052:0915/120926.925:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[1] [9052:0915/120926.925:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[1] [9052:0915/120926.925:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] Port 5173 is in use, trying another one...
+[0] 
+[0]   [32m[1mVITE[22m v8.3.0[39m  [2mready in [0m[1m517[22m[2m[0m ms[22m
+[0] 
+[0]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5174[22m/[39m
+[0] [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 2 modules transformed.
+[0] ✓ 187 modules transformed.
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/preload.js  1.11 kB │ gzip: 0.43 kB
+[0] 
+[0] [36mbuilt in 916ms.[39m
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.49 kB │ gzip: 348.84 kB
+[0] 
+[0] [36mbuilt in 1047ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [17900:0915/120928.732:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [17900:0915/120928.733:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [17900:0915/120928.733:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [17900:0915/120928.737:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [17900:0915/120928.737:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [17900:0915/120928.737:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [17900:0915/120928.737:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [17900:0915/120928.737:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [17900:0915/120928.737:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [2m12:11:07 PM[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[0] [2m12:11:07 PM[22m [36m[1m[vite][22m[39m server restarted.
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36mvite v8.3.0 [32mbuilding client environment for development...[36m[39m
+[0] [36m
+[0] watching for file changes...[39m
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 2 modules transformed.
+[0] ✓ 5 modules transformed.
+[0] rendering chunks...
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/preload.js  1.11 kB │ gzip: 0.43 kB
+[0] 
+[0] [36mbuilt in 358ms.[39m
+[0] computing gzip size...
+[0] dist-electron/main.js  8.76 kB │ gzip: 2.77 kB
+[0] 
+[0] [36mbuilt in 472ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [21924:0915/121108.478:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21924:0915/121108.479:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21924:0915/121108.479:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21924:0915/121108.480:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21924:0915/121108.480:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21924:0915/121108.480:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21924:0915/121108.480:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21924:0915/121108.480:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21924:0915/121108.480:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] (node:21924) UnhandledPromiseRejectionWarning: Error: EPERM: operation not permitted, rename 'C:\Users\talib\AppData\Roaming\inventory-management\warehouses.db~' -> 'C:\Users\talib\AppData\Roaming\inventory-management\warehouses.db'
+[0]     at async rename (node:internal/fs/promises:1490:10)
+[0]     at async Object.crashSafeWriteFileLinesAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\storage.js:248:3)
+[0]     at async Persistence.persistCachedDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:112:5)
+[0]     at async Persistence.loadDatabaseAsync (C:\Programming\Inventory Management\node_modules\@seald-io\nedb\lib\persistence.js:339:5)
+[0] (Use `electron --trace-warnings ...` to show where the warning was created)
+[0] (node:21924) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 11)
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 5 modules transformed.
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  8.72 kB │ gzip: 2.76 kB
+[0] 
+[0] [36mbuilt in 79ms.[39m
+[0] ✓ 187 modules transformed.
+[0] 
+[0] rendering chunks...
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [5220:0915/121119.169:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [5220:0915/121119.171:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [5220:0915/121119.171:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [5220:0915/121119.171:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [5220:0915/121119.173:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [5220:0915/121119.173:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [5220:0915/121119.175:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [5220:0915/121119.176:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [5220:0915/121119.176:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.45 kB │ gzip: 348.83 kB
+[0] 
+[0] [36mbuilt in 753ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [14676:0915/121119.801:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: The operation completed successfully. (0x0)
+[0] [14676:0915/121119.807:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [14676:0915/121119.807:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [14676:0915/121119.826:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [14676:0915/121119.827:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [14676:0915/121119.827:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [14676:0915/121119.830:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [14676:0915/121119.830:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [14676:0915/121119.830:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 5 modules transformed.
+[0] ✓ 187 modules transformed.
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  8.94 kB │ gzip: 2.81 kB
+[0] 
+[0] [36mbuilt in 238ms.[39m
+[0] 
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.67 kB │ gzip: 348.88 kB
+[0] 
+[0] [36mbuilt in 521ms.[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] ✓ 187 modules transformed.
+[0] 
+[0] rendering chunks...
+[0] computing gzip size...
+[0] dist-electron/main.js  1,566.67 kB │ gzip: 348.88 kB
+[0] 
+[0] [36mbuilt in 329ms.[39m
+[0] 
+[0] [Sync] Starting auto-sync every 60 seconds.
+[0] [21708:0915/121128.961:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21708:0915/121128.962:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21708:0915/121128.966:ERROR:net\disk_cache\cache_util_win.cc:25] Unable to move the cache: Access is denied. (0x5)
+[0] [21708:0915/121128.966:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21708:0915/121128.966:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21708:0915/121128.966:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21708:0915/121128.966:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [21708:0915/121128.966:ERROR:net\disk_cache\disk_cache.cc:290] Unable to create cache
+[0] [21708:0915/121128.967:ERROR:gpu\ipc\host\gpu_disk_cache.cc:737] Gpu Cache Creation failed: -2
+[0] [36m
+[0] build started...[39m
+[0] [36m
+[0] build started...[39m
+[0] transforming...
+[0] transforming...
+[0] ✓ 2 modules transformed.
+[0] ✓ 2 modules transformed.
+[0] rendering chunks...
+[0] rendering chunks...
+[0] computing gzip size...
+[0] computing gzip size...
+[0] dist-electron/preload.js  1.17 kB │ gzip: 0.44 kB
+[0] 
+[0] dist-electron/preload.js  1.17 kB │ gzip: 0.44 kB
+[0] 
+[0] [36mbuilt in 19ms.[39m
+[0] [36mbuilt in 18ms.[39m

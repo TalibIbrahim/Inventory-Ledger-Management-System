@@ -55,10 +55,17 @@ export const Header: React.FC<HeaderProps> = ({
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'synced' | 'error' | 'offline'>('offline');
 
   React.useEffect(() => {
-    if (window.electronAPI && window.electronAPI.onSyncStatus) {
-      window.electronAPI.onSyncStatus((status) => {
-        setSyncStatus(status);
-      });
+    if (window.electronAPI) {
+      if (window.electronAPI.getSyncStatus) {
+        window.electronAPI.getSyncStatus().then((status) => {
+          setSyncStatus(status);
+        });
+      }
+      if (window.electronAPI.onSyncStatus) {
+        window.electronAPI.onSyncStatus((status) => {
+          setSyncStatus(status);
+        });
+      }
     }
   }, []);
 
