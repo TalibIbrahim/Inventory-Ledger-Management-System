@@ -14,6 +14,7 @@ import {
   Receipt,
   Printer,
 } from 'lucide-react';
+import { SearchableSelect } from '../SearchableSelect';
 
 interface SaleVoucherViewProps {
   products: Product[];
@@ -472,17 +473,14 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                             <label className="block text-[10px] font-medium text-slate-500 mb-1">
                               Product Catalog
                             </label>
-                            <select
+                            <SearchableSelect
+                              options={products.map((p) => ({
+                                value: p.id,
+                                label: `[${p.sku}] ${p.name}`,
+                              }))}
                               value={line.productId}
-                              onChange={(e) => handleLineChange(index, 'productId', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            >
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  [{p.sku}] {p.name}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(value) => handleLineChange(index, 'productId', value)}
+                            />
                             <div className="flex items-center justify-between text-[11px] mt-1">
                               <span
                                 className={`font-mono ${
