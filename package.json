@@ -1,7 +1,7 @@
 {
   "name": "inventory-management",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Axiom Stock Ledger",
   "author": "Talib Ibrahim",
   "repository": {
@@ -29,7 +29,9 @@
   "build": {
     "appId": "com.axiom.stockledger",
     "productName": "Axiom Stock Ledger",
-    "publish": ["github"],
+    "publish": [
+      "github"
+    ],
     "directories": {
       "output": "release"
     },
