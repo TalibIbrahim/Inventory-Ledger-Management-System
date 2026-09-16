@@ -729,7 +729,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                     return (
                       <div
                         key={index}
-                        className={`p-3 rounded-2xl border transition-all ${
+                        style={{ zIndex: 30 - index }}
+                        className={`relative p-3 rounded-2xl border transition-all ${
                           isExceeded || lineErr
                             ? 'bg-red-50/50 border-red-200'
                             : 'bg-slate-50/80 border-slate-200/80'
