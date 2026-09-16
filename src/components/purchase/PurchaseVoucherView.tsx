@@ -517,9 +517,9 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
 
       {/* New Purchase Voucher Modal Sheet */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/30 backdrop-blur-md overflow-y-auto">
-          <div className="glass-modal relative w-full max-w-3xl rounded-3xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/70 bg-slate-50/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-3xl w-full border border-black/[0.08] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-700 shadow-2xs">
                   <ArrowDownLeft className="w-4 h-4 stroke-[2.2]" />
@@ -533,13 +533,13 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="btn-press text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+                className="p-2 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5">
               {/* Draft Restored Banner */}
               {hasRestoredDraft && (
                 <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
@@ -736,104 +736,121 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                   </button>
                 </div>
 
-                <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-2xs">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200/80 bg-slate-50/70 text-slate-500 font-semibold uppercase text-[10px]">
-                        <th className="py-2.5 px-3">Product Catalog Item</th>
-                        <th className="py-2.5 px-2">Brand & UOM</th>
-                        <th className="py-2.5 px-2 text-right w-24">Qty In</th>
-                        <th className="py-2.5 px-2 text-right w-28">Rate (Rs.)</th>
-                        <th className="py-2.5 px-3 text-right w-28">Total (Rs.)</th>
-                        <th className="py-2.5 px-2 text-center w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-sans">
-                      {calculatedLines.map((line, idx) => {
-                        const lineErr = validationErrors?.lineErrors[idx];
+                <div className="space-y-2.5">
+                  {calculatedLines.map((line, idx) => {
+                    const lineErr = validationErrors?.lineErrors[idx];
 
-                        return (
-                          <tr key={idx} className="hover:bg-slate-50/60">
-                            <td className="py-2 px-3">
-                              <SearchableSelect
-                                options={products.map((p) => ({
-                                  value: p.id,
-                                  label: `[${p.sku}] ${p.name}`,
-                                  subLabel: `${p.brand} • ${p.type} (${p.uom})`,
-                                }))}
-                                value={line.productId}
-                                onChange={(val) => handleProductChange(idx, val)}
-                                accentColor="emerald"
-                                hasError={Boolean(lineErr?.productId)}
-                              />
-                              {lineErr?.productId && (
-                                <p className="text-[10px] text-rose-600 mt-1 font-medium">
-                                  {lineErr.productId}
-                                </p>
+                    return (
+                      <div
+                        key={idx}
+                        style={{ zIndex: 30 - idx }}
+                        className={`relative p-3 rounded-2xl border transition-all ${
+                          lineErr
+                            ? 'bg-red-50/50 border-red-200'
+                            : 'bg-slate-50/80 border-slate-200/80'
+                        }`}
+                      >
+                        <div className="grid grid-cols-12 gap-3 items-center">
+                          {/* Product Selection */}
+                          <div className="col-span-12 sm:col-span-5">
+                            <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                              Product Catalog
+                            </label>
+                            <SearchableSelect
+                              options={products.map((p) => ({
+                                value: p.id,
+                                label: `[${p.sku}] ${p.name}`,
+                                subLabel: `${p.brand} • ${p.type} (${p.uom})`,
+                              }))}
+                              value={line.productId}
+                              onChange={(val) => handleProductChange(idx, val)}
+                              accentColor="emerald"
+                              hasError={Boolean(lineErr?.productId)}
+                            />
+                            <div className="flex items-center justify-between text-[11px] mt-1 text-slate-500">
+                              <span className="truncate">
+                                {line.product ? `${line.product.brand} • ${line.product.type}` : 'No product selected'}
+                              </span>
+                              {line.product && (
+                                <span className="font-mono text-slate-400 ml-1">({line.product.uom})</span>
                               )}
-                            </td>
-                            <td className="py-2 px-2 whitespace-nowrap text-slate-500">
-                              <span className="font-semibold text-slate-700">{line.product?.brand}</span>
-                              <span className="text-[11px] text-slate-400 ml-1">({line.product?.uom})</span>
-                            </td>
-                            <td className="py-2 px-2 text-right">
-                              <input
-                                type="number"
-                                min="1"
-                                value={line.quantity}
-                                onChange={(e) => handleQtyChange(idx, e.target.value)}
-                                onKeyDown={(e) => handleLineKeyDown(e, idx)}
-                                className={`w-full bg-slate-50 border rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none ${
-                                  lineErr?.quantity
-                                    ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10'
-                                    : 'border-slate-200/80 focus:border-emerald-500'
-                                }`}
-                              />
-                              {lineErr?.quantity && (
-                                <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
-                                  {lineErr.quantity}
-                                </p>
-                              )}
-                            </td>
-                            <td className="py-2 px-2 text-right">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={line.unitPrice}
-                                onChange={(e) => handlePriceChange(idx, e.target.value)}
-                                onKeyDown={(e) => handleLineKeyDown(e, idx)}
-                                className={`w-full bg-slate-50 border rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none ${
-                                  lineErr?.unitPrice
-                                    ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10'
-                                    : 'border-slate-200/80 focus:border-emerald-500'
-                                }`}
-                              />
-                              {lineErr?.unitPrice && (
-                                <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
-                                  {lineErr.unitPrice}
-                                </p>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                            </div>
+                            {lineErr?.productId && (
+                              <p className="text-[10px] text-rose-600 mt-0.5 font-medium">
+                                {lineErr.productId}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Quantity */}
+                          <div className="col-span-4 sm:col-span-2">
+                            <label className="block text-[10px] font-medium text-slate-500 mb-1">Qty In</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={line.quantity}
+                              onChange={(e) => handleQtyChange(idx, e.target.value)}
+                              onKeyDown={(e) => handleLineKeyDown(e, idx)}
+                              className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-lg focus:outline-none text-right font-mono ${
+                                lineErr?.quantity
+                                  ? 'border-red-400 text-red-700 focus:ring-red-500/20'
+                                  : 'border-slate-200/80 focus:border-emerald-500'
+                              }`}
+                            />
+                            {lineErr?.quantity && (
+                              <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
+                                {lineErr.quantity}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Unit Purchase Price */}
+                          <div className="col-span-4 sm:col-span-2">
+                            <label className="block text-[10px] font-medium text-slate-500 mb-1">Rate (Rs.)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={line.unitPrice}
+                              onChange={(e) => handlePriceChange(idx, e.target.value)}
+                              onKeyDown={(e) => handleLineKeyDown(e, idx)}
+                              className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-lg focus:outline-none text-right font-mono ${
+                                lineErr?.unitPrice
+                                  ? 'border-red-400 text-red-700 focus:ring-red-500/20'
+                                  : 'border-slate-200/80 focus:border-emerald-500'
+                              }`}
+                            />
+                            {lineErr?.unitPrice && (
+                              <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
+                                {lineErr.unitPrice}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Line Total */}
+                          <div className="col-span-3 sm:col-span-2 text-right">
+                            <div className="text-[10px] text-slate-400 uppercase font-medium">Amount</div>
+                            <div className="text-xs font-mono font-bold text-slate-900 mt-1">
                               {formatPKR(line.lineTotal)}
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              {lineItems.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveLine(idx)}
-                                  className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+                          </div>
+
+                          {/* Remove button */}
+                          <div className="col-span-1 text-center">
+                            {lineItems.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLine(idx)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Voucher Total Bar */}
