@@ -17,7 +17,8 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 
 export type MainSection = 'purchase' | 'sales' | 'inventory' | 'settings';
@@ -42,6 +43,7 @@ interface HeaderProps {
   onSelectSection: (section: MainSection) => void;
   onSelectSubOption: (subOption: SubOption) => void;
   onClearData: () => void;
+  onOpenChangelog?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectSection,
   onSelectSubOption,
   onClearData,
+  onOpenChangelog,
 }) => {
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'synced' | 'error' | 'offline'>('offline');
@@ -102,6 +105,18 @@ export const Header: React.FC<HeaderProps> = ({
                   {syncStatus === 'offline' && <CloudOff className="w-3 h-3" />}
                   <span className="capitalize">{syncStatus}</span>
                 </span>
+
+                {/* What's New v1.0.4 Badge Button */}
+                {onOpenChangelog && (
+                  <button
+                    onClick={onOpenChangelog}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs"
+                    title="What's New in v1.0.4 (Shortcuts & Features)"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    <span>v1.0.4 What's New</span>
+                  </button>
+                )}
               </div>
               <p className="text-[11px] text-slate-400">
                 Purchase • Sales • Inventory Management (Pakistan Edition)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Warehouse, SaleVoucher } from '../../types/inventory';
 import { formatPKR } from '../../utils/currency';
 import {
@@ -13,8 +13,22 @@ import {
   AlertTriangle,
   Receipt,
   Printer,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { SearchableSelect } from '../SearchableSelect';
+import {
+  validateSaleVoucher,
+  type VoucherValidationResult,
+} from '../../utils/voucherValidation';
+import {
+  saveVoucherDraft,
+  loadVoucherDraft,
+  clearVoucherDraft,
+  isSaleDraftSubstantive,
+  DRAFT_STORAGE_KEYS,
+  type SaleDraftData,
+} from '../../utils/voucherDrafts';
 
 interface SaleVoucherViewProps {
   products: Product[];
@@ -54,6 +68,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   const [notes, setNotes] = useState('');
   const [recordedBy, setRecordedBy] = useState('Kamran Hashmi');
   const [errorMsg, setErrorMsg] = useState('');
+  const [validationErrors, setValidationErrors] = useState<VoucherValidationResult | null>(null);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
   const [lineItems, setLineItems] = useState<FormLineItem[]>([
     {
@@ -66,6 +82,73 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [filterWarehouse, setFilterWarehouse] = useState('ALL');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Open modal with draft recovery check
+  const handleOpenModal = () => {
+    setErrorMsg('');
+    setValidationErrors(null);
+    const draft = loadVoucherDraft<SaleDraftData>(DRAFT_STORAGE_KEYS.SALE_VOUCHER);
+    if (draft && isSaleDraftSubstantive(draft)) {
+      setCustomerName(draft.customerName || '');
+      if (draft.warehouseId) setWarehouseId(draft.warehouseId);
+      if (draft.date) setDate(draft.date);
+      setNotes(draft.notes || '');
+      if (draft.recordedBy) setRecordedBy(draft.recordedBy);
+      if (draft.lineItems && draft.lineItems.length > 0) {
+        setLineItems(draft.lineItems);
+      }
+      setHasRestoredDraft(true);
+    } else {
+      setHasRestoredDraft(false);
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearVoucherDraft(DRAFT_STORAGE_KEYS.SALE_VOUCHER);
+    setHasRestoredDraft(false);
+    setCustomerName('');
+    setWarehouseId(warehouses[0]?.id || '');
+    setDate(new Date().toISOString().slice(0, 10));
+    setNotes('');
+    setValidationErrors(null);
+    setErrorMsg('');
+    setLineItems([
+      {
+        productId: products[0]?.id || '',
+        quantity: '5',
+        unitPrice: products[0]?.salePrice.toString() || '1500',
+      },
+    ]);
+  };
+
+  // Auto-save form draft whenever modal is open and inputs change
+  useEffect(() => {
+    if (!isModalOpen) return;
+    saveVoucherDraft(DRAFT_STORAGE_KEYS.SALE_VOUCHER, {
+      customerName,
+      warehouseId,
+      date,
+      notes,
+      recordedBy,
+      lineItems,
+    });
+  }, [isModalOpen, customerName, warehouseId, date, notes, recordedBy, lineItems]);
+
+  // Keyboard Shortcuts: Ctrl/Cmd+K to focus search, Escape to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === 'Escape' && isModalOpen) {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   const handleAddLine = () => {
     const firstProd = products[0];
@@ -79,9 +162,26 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     ]);
   };
 
+  const handleLineKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (index === lineItems.length - 1) {
+        handleAddLine();
+      }
+    }
+  };
+
   const handleRemoveLine = (index: number) => {
     if (lineItems.length <= 1) return;
     setLineItems(lineItems.filter((_, i) => i !== index));
+    if (validationErrors?.lineErrors[index]) {
+      const updatedLineErrors = { ...validationErrors.lineErrors };
+      delete updatedLineErrors[index];
+      setValidationErrors({
+        ...validationErrors,
+        lineErrors: updatedLineErrors,
+      });
+    }
   };
 
   const handleLineChange = (index: number, field: keyof FormLineItem, value: string) => {
@@ -97,6 +197,28 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     }
 
     setLineItems(updated);
+
+    if (validationErrors?.lineErrors[index]?.[field]) {
+      const updatedLineErrors = { ...validationErrors.lineErrors };
+      if (updatedLineErrors[index]) {
+        delete updatedLineErrors[index][field];
+      }
+      setValidationErrors({ ...validationErrors, lineErrors: updatedLineErrors });
+    }
+  };
+
+  // Quick Date Helpers
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  const setQuickDate = (d: string) => {
+    setDate(d);
+    if (validationErrors?.fieldErrors.date) {
+      setValidationErrors({
+        ...validationErrors,
+        fieldErrors: { ...validationErrors.fieldErrors, date: undefined },
+      });
+    }
   };
 
   // Stock check helper for form
@@ -124,15 +246,21 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
-    if (!customerName.trim()) {
-      setErrorMsg('Customer name is required.');
+    const validation = validateSaleVoucher({
+      customerName,
+      warehouseId,
+      date,
+      items: lineItems,
+      getProductStockAtWarehouse,
+    });
+
+    if (!validation.isValid) {
+      setValidationErrors(validation);
+      setErrorMsg(validation.generalError || 'Please fix the errors below.');
       return;
     }
 
-    if (hasInsufficientStock) {
-      setErrorMsg('One or more items exceed the stock available at the selected warehouse.');
-      return;
-    }
+    setValidationErrors(null);
 
     const payload = {
       customerName: customerName.trim(),
@@ -152,6 +280,9 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       setErrorMsg(res.error || 'Failed to generate sale invoice.');
       return;
     }
+
+    clearVoucherDraft(DRAFT_STORAGE_KEYS.SALE_VOUCHER);
+    setHasRestoredDraft(false);
 
     // Reset & open invoice slip
     setIsModalOpen(false);
@@ -179,6 +310,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
 
   const totalSalesRevenue = vouchers.reduce((acc, v) => acc + v.totalAmount, 0);
   const totalUnitsDispatched = vouchers.reduce((acc, v) => acc + v.totalQuantity, 0);
+  const isFiltered = searchQuery.trim() !== '' || filterWarehouse !== 'ALL';
 
   return (
     <div className="space-y-6">
@@ -196,10 +328,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
         </div>
 
         <button
-          onClick={() => {
-            setErrorMsg('');
-            setIsModalOpen(true);
-          }}
+          onClick={handleOpenModal}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-medium text-sm shadow-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
         >
           <PlusCircle className="w-4 h-4" />
@@ -259,19 +388,25 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       <div className="p-4 rounded-2xl bg-white border border-black/[0.06] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Search invoice #, customer, item..."
+            placeholder="Search invoice #, customer, item... (Ctrl+K)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-3 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all"
+            className="w-full pl-3 pr-14 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all"
           />
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-400 bg-slate-100 rounded border border-slate-200">
+              ⌘K
+            </kbd>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <select
             value={filterWarehouse}
             onChange={(e) => setFilterWarehouse(e.target.value)}
-            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 w-full sm:w-auto"
+            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 w-full sm:w-auto cursor-pointer"
           >
             <option value="ALL">All Warehouses</option>
             {warehouses.map((w) => (
@@ -280,6 +415,18 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
               </option>
             ))}
           </select>
+
+          {isFiltered && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setFilterWarehouse('ALL');
+              }}
+              className="px-2.5 py-2 text-xs text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors whitespace-nowrap"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,10 +449,39 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredVouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <Receipt className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="font-medium text-slate-500">No sale vouchers recorded</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Click "New Sale Invoice" above to create one.</p>
+                  <td colSpan={8} className="py-14 text-center">
+                    <div className="max-w-sm mx-auto flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 mb-3">
+                        <Receipt className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-slate-800 text-sm">
+                        {isFiltered ? 'No Invoices Found' : 'No Sale Invoices Recorded Yet'}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 mb-4">
+                        {isFiltered
+                          ? 'No sale invoices match your search keyword or selected warehouse.'
+                          : 'Create your first sale invoice to dispatch stock to customers.'}
+                      </p>
+                      {isFiltered ? (
+                        <button
+                          onClick={() => {
+                            setSearchQuery('');
+                            setFilterWarehouse('ALL');
+                          }}
+                          className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all"
+                        >
+                          Clear Search Filters
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleOpenModal}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                          <span>Create First Sale Invoice</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -373,6 +549,24 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
 
             {/* Modal Form Content */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5">
+              {/* Draft Restored Banner */}
+              {hasRestoredDraft && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span>Restored your unsaved draft from a previous session.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:text-amber-950 bg-amber-100/80 hover:bg-amber-200 rounded-lg transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Discard Draft</span>
+                  </button>
+                </div>
+              )}
+
               {errorMsg && (
                 <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -391,9 +585,26 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                     required
                     placeholder="e.g. Indus Engineering Works Ltd"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      if (validationErrors?.fieldErrors.partyName) {
+                        setValidationErrors({
+                          ...validationErrors,
+                          fieldErrors: { ...validationErrors.fieldErrors, partyName: undefined },
+                        });
+                      }
+                    }}
+                    className={`w-full px-3 py-2 text-xs bg-white border rounded-xl focus:outline-none transition-all ${
+                      validationErrors?.fieldErrors.partyName
+                        ? 'border-rose-400 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-rose-50/10'
+                        : 'border-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500'
+                    }`}
                   />
+                  {validationErrors?.fieldErrors.partyName && (
+                    <p className="text-[11px] text-rose-600 mt-1 font-medium">
+                      {validationErrors.fieldErrors.partyName}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -402,8 +613,20 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                   </label>
                   <select
                     value={warehouseId}
-                    onChange={(e) => setWarehouseId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    onChange={(e) => {
+                      setWarehouseId(e.target.value);
+                      if (validationErrors?.fieldErrors.warehouseId) {
+                        setValidationErrors({
+                          ...validationErrors,
+                          fieldErrors: { ...validationErrors.fieldErrors, warehouseId: undefined },
+                        });
+                      }
+                    }}
+                    className={`w-full px-3 py-2 text-xs bg-white border rounded-xl focus:outline-none ${
+                      validationErrors?.fieldErrors.warehouseId
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+                        : 'border-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500'
+                    }`}
                   >
                     {warehouses.map((w) => (
                       <option key={w.id} value={w.id}>
@@ -411,14 +634,53 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                       </option>
                     ))}
                   </select>
+                  {validationErrors?.fieldErrors.warehouseId && (
+                    <p className="text-[11px] text-rose-600 mt-1 font-medium">
+                      {validationErrors.fieldErrors.warehouseId}
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice Date</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">Invoice Date</label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate(todayStr)}
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                          date === todayStr
+                            ? 'bg-blue-100 text-blue-800 font-semibold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate(yesterdayStr)}
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                          date === yesterdayStr
+                            ? 'bg-blue-100 text-blue-800 font-semibold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Yesterday
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => {
+                      setDate(e.target.value);
+                      if (validationErrors?.fieldErrors.date) {
+                        setValidationErrors({
+                          ...validationErrors,
+                          fieldErrors: { ...validationErrors.fieldErrors, date: undefined },
+                        });
+                      }
+                    }}
                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>
@@ -437,9 +699,14 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
               {/* Line Items Section */}
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Dispatch Line Items ({lineItems.length})
-                  </span>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Dispatch Line Items ({lineItems.length})
+                    </span>
+                    <span className="text-[11px] text-slate-400 ml-2 hidden sm:inline">
+                      Press <kbd className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200">Enter</kbd> to add row
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={handleAddLine}
@@ -457,12 +724,13 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                     const isExceeded = qtyNum > stockInfo.available;
                     const priceNum = Number(line.unitPrice) || 0;
                     const lineTotal = qtyNum * priceNum;
+                    const lineErr = validationErrors?.lineErrors[index];
 
                     return (
                       <div
                         key={index}
                         className={`p-3 rounded-2xl border transition-all ${
-                          isExceeded
+                          isExceeded || lineErr
                             ? 'bg-red-50/50 border-red-200'
                             : 'bg-slate-50/80 border-slate-200/80'
                         }`}
@@ -477,9 +745,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                               options={products.map((p) => ({
                                 value: p.id,
                                 label: `[${p.sku}] ${p.name}`,
+                                subLabel: `${p.brand} • ${p.type} (${p.uom})`,
                               }))}
                               value={line.productId}
                               onChange={(value) => handleLineChange(index, 'productId', value)}
+                              hasError={Boolean(lineErr?.productId)}
                             />
                             <div className="flex items-center justify-between text-[11px] mt-1">
                               <span
@@ -493,6 +763,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                                 <span className="text-red-600 font-medium">Insufficient Stock!</span>
                               )}
                             </div>
+                            {lineErr?.productId && (
+                              <p className="text-[10px] text-rose-600 mt-0.5 font-medium">
+                                {lineErr.productId}
+                              </p>
+                            )}
                           </div>
 
                           {/* Quantity */}
@@ -503,12 +778,18 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                               min="1"
                               value={line.quantity}
                               onChange={(e) => handleLineChange(index, 'quantity', e.target.value)}
+                              onKeyDown={(e) => handleLineKeyDown(e, index)}
                               className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-lg focus:outline-none text-right font-mono ${
-                                isExceeded
+                                isExceeded || lineErr?.quantity
                                   ? 'border-red-400 text-red-700 focus:ring-red-500/20'
                                   : 'border-slate-200 focus:ring-blue-500/20'
                               }`}
                             />
+                            {lineErr?.quantity && (
+                              <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
+                                {lineErr.quantity}
+                              </p>
+                            )}
                           </div>
 
                           {/* Unit Sale Price */}
@@ -519,8 +800,18 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                               min="0"
                               value={line.unitPrice}
                               onChange={(e) => handleLineChange(index, 'unitPrice', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-right font-mono"
+                              onKeyDown={(e) => handleLineKeyDown(e, index)}
+                              className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-lg focus:outline-none text-right font-mono ${
+                                lineErr?.unitPrice
+                                  ? 'border-red-400 text-red-700 focus:ring-red-500/20'
+                                  : 'border-slate-200 focus:ring-2 focus:ring-blue-500/20'
+                              }`}
                             />
+                            {lineErr?.unitPrice && (
+                              <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
+                                {lineErr.unitPrice}
+                              </p>
+                            )}
                           </div>
 
                           {/* Line Total */}
