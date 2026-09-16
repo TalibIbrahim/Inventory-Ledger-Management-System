@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Warehouse, PurchaseVoucher } from '../../types/inventory';
 import { formatPKR } from '../../utils/currency';
 import {
@@ -12,7 +12,22 @@ import {
   CheckCircle2,
   ShoppingBag,
   ArrowDownLeft,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
+import { SearchableSelect } from '../SearchableSelect';
+import {
+  validatePurchaseVoucher,
+  type VoucherValidationResult,
+} from '../../utils/voucherValidation';
+import {
+  saveVoucherDraft,
+  loadVoucherDraft,
+  clearVoucherDraft,
+  isPurchaseDraftSubstantive,
+  DRAFT_STORAGE_KEYS,
+  type PurchaseDraftData,
+} from '../../utils/voucherDrafts';
 
 interface PurchaseVoucherViewProps {
   products: Product[];
@@ -52,6 +67,13 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
   const [notes, setNotes] = useState('');
   const [recordedBy, setRecordedBy] = useState('Tariq Mehmood');
   const [errorMsg, setErrorMsg] = useState('');
+  const [validationErrors, setValidationErrors] = useState<VoucherValidationResult | null>(null);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterWarehouse, setFilterWarehouse] = useState('ALL');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [lineItems, setLineItems] = useState<FormLineItem[]>([
     {
@@ -60,6 +82,75 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
       unitPrice: products[0]?.purchasePrice.toString() || '1000',
     },
   ]);
+
+  // Open modal with draft recovery check
+  const handleOpenModal = () => {
+    setErrorMsg('');
+    setValidationErrors(null);
+    const draft = loadVoucherDraft<PurchaseDraftData>(DRAFT_STORAGE_KEYS.PURCHASE_VOUCHER);
+    if (draft && isPurchaseDraftSubstantive(draft)) {
+      setSupplierName(draft.supplierName || '');
+      setSupplierInvoiceNo(draft.supplierInvoiceNo || '');
+      if (draft.warehouseId) setWarehouseId(draft.warehouseId);
+      if (draft.date) setDate(draft.date);
+      setNotes(draft.notes || '');
+      if (draft.recordedBy) setRecordedBy(draft.recordedBy);
+      if (draft.lineItems && draft.lineItems.length > 0) {
+        setLineItems(draft.lineItems);
+      }
+      setHasRestoredDraft(true);
+    } else {
+      setHasRestoredDraft(false);
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearVoucherDraft(DRAFT_STORAGE_KEYS.PURCHASE_VOUCHER);
+    setHasRestoredDraft(false);
+    setSupplierName('');
+    setSupplierInvoiceNo('');
+    setWarehouseId(warehouses[0]?.id || '');
+    setDate(new Date().toISOString().slice(0, 10));
+    setNotes('');
+    setValidationErrors(null);
+    setErrorMsg('');
+    setLineItems([
+      {
+        productId: products[0]?.id || '',
+        quantity: '50',
+        unitPrice: products[0]?.purchasePrice.toString() || '1000',
+      },
+    ]);
+  };
+
+  // Auto-save form draft whenever modal is open and inputs change
+  useEffect(() => {
+    if (!isModalOpen) return;
+    saveVoucherDraft(DRAFT_STORAGE_KEYS.PURCHASE_VOUCHER, {
+      supplierName,
+      supplierInvoiceNo,
+      warehouseId,
+      date,
+      notes,
+      recordedBy,
+      lineItems,
+    });
+  }, [isModalOpen, supplierName, supplierInvoiceNo, warehouseId, date, notes, recordedBy, lineItems]);
+
+  // Keyboard Shortcuts: Ctrl/Cmd+K to focus search, Escape to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === 'Escape' && isModalOpen) {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   const handleAddLine = () => {
     const firstProd = products[0];
@@ -73,9 +164,26 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     ]);
   };
 
+  const handleLineKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (index === lineItems.length - 1) {
+        handleAddLine();
+      }
+    }
+  };
+
   const handleRemoveLine = (index: number) => {
     if (lineItems.length <= 1) return;
     setLineItems(lineItems.filter((_, idx) => idx !== index));
+    if (validationErrors?.lineErrors[index]) {
+      const updatedLineErrors = { ...validationErrors.lineErrors };
+      delete updatedLineErrors[index];
+      setValidationErrors({
+        ...validationErrors,
+        lineErrors: updatedLineErrors,
+      });
+    }
   };
 
   const handleProductChange = (index: number, newProdId: string) => {
@@ -87,18 +195,56 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
       unitPrice: prod ? prod.purchasePrice.toString() : updated[index].unitPrice,
     };
     setLineItems(updated);
+
+    if (validationErrors?.lineErrors[index]?.productId) {
+      const updatedLineErrors = { ...validationErrors.lineErrors };
+      if (updatedLineErrors[index]) {
+        delete updatedLineErrors[index].productId;
+      }
+      setValidationErrors({ ...validationErrors, lineErrors: updatedLineErrors });
+    }
   };
 
   const handleQtyChange = (index: number, val: string) => {
     const updated = [...lineItems];
     updated[index].quantity = val;
     setLineItems(updated);
+
+    if (validationErrors?.lineErrors[index]?.quantity) {
+      const updatedLineErrors = { ...validationErrors.lineErrors };
+      if (updatedLineErrors[index]) {
+        delete updatedLineErrors[index].quantity;
+      }
+      setValidationErrors({ ...validationErrors, lineErrors: updatedLineErrors });
+    }
   };
 
   const handlePriceChange = (index: number, val: string) => {
     const updated = [...lineItems];
     updated[index].unitPrice = val;
     setLineItems(updated);
+
+    if (validationErrors?.lineErrors[index]?.unitPrice) {
+      const updatedLineErrors = { ...validationErrors.lineErrors };
+      if (updatedLineErrors[index]) {
+        delete updatedLineErrors[index].unitPrice;
+      }
+      setValidationErrors({ ...validationErrors, lineErrors: updatedLineErrors });
+    }
+  };
+
+  // Quick Date Helpers
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  const setQuickDate = (d: string) => {
+    setDate(d);
+    if (validationErrors?.fieldErrors.date) {
+      setValidationErrors({
+        ...validationErrors,
+        fieldErrors: { ...validationErrors.fieldErrors, date: undefined },
+      });
+    }
   };
 
   // Calculations
@@ -122,26 +268,26 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
-    if (!supplierName.trim()) {
-      setErrorMsg('Please enter the supplier / vendor name.');
+    const validation = validatePurchaseVoucher({
+      supplierName,
+      warehouseId,
+      date,
+      items: lineItems,
+    });
+
+    if (!validation.isValid) {
+      setValidationErrors(validation);
+      setErrorMsg(validation.generalError || 'Please fix the errors below.');
       return;
     }
 
-    if (!warehouseId) {
-      setErrorMsg('Please select a receiving warehouse location.');
-      return;
-    }
+    setValidationErrors(null);
 
     const payloadItems = calculatedLines.map((l) => ({
       productId: l.productId,
       quantity: l.qtyNumber,
       unitPrice: l.priceNumber,
     }));
-
-    if (payloadItems.some((i) => i.quantity <= 0)) {
-      setErrorMsg('Line item quantities must be greater than 0.');
-      return;
-    }
 
     const result = await onCreateVoucher({
       supplierName: supplierName.trim(),
@@ -156,6 +302,8 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     if (!result.success) {
       setErrorMsg(result.error || 'Failed to save purchase voucher.');
     } else {
+      clearVoucherDraft(DRAFT_STORAGE_KEYS.PURCHASE_VOUCHER);
+      setHasRestoredDraft(false);
       setIsModalOpen(false);
       // Reset
       setSupplierName('');
@@ -170,6 +318,23 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
       ]);
     }
   };
+
+  // Filtered vouchers
+  const filteredVouchers = vouchers.filter((v) => {
+    if (filterWarehouse !== 'ALL' && v.warehouseId !== filterWarehouse) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchesNo = v.voucherNo.toLowerCase().includes(q);
+      const matchesSupplier = v.supplierName.toLowerCase().includes(q);
+      const matchesItems = v.items.some(
+        (i) => i.productName.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q)
+      );
+      if (!matchesNo && !matchesSupplier && !matchesItems) return false;
+    }
+    return true;
+  });
+
+  const isFiltered = searchQuery.trim() !== '' || filterWarehouse !== 'ALL';
 
   return (
     <div className="space-y-4">
@@ -191,15 +356,58 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
         </div>
 
         <button
-          onClick={() => {
-            setErrorMsg('');
-            setIsModalOpen(true);
-          }}
+          onClick={handleOpenModal}
           className="btn-press flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/25 transition-all"
         >
           <PlusCircle className="w-4 h-4" />
           + New Purchase Voucher
         </button>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="glass-panel rounded-2xl p-4 border border-white/80 shadow-[0_2px_14px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative w-full sm:w-80">
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search voucher #, supplier, item... (Ctrl+K)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-3 pr-14 py-2 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white transition-all"
+          />
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-400 bg-slate-100 rounded border border-slate-200">
+              ⌘K
+            </kbd>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <select
+            value={filterWarehouse}
+            onChange={(e) => setFilterWarehouse(e.target.value)}
+            className="px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700 w-full sm:w-auto cursor-pointer"
+          >
+            <option value="ALL">All Warehouses</option>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name} ({w.city})
+              </option>
+            ))}
+          </select>
+
+          {isFiltered && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setFilterWarehouse('ALL');
+              }}
+              className="px-2.5 py-2 text-xs text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors whitespace-nowrap"
+            >
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Vouchers Table */}
@@ -219,18 +427,45 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/90 font-sans">
-              {vouchers.length === 0 ? (
+              {filteredVouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <FileSpreadsheet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                    <p className="font-semibold text-slate-700">No Purchase Vouchers Recorded Yet</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Create your first purchase voucher to intake goods into inventory.
-                    </p>
+                  <td colSpan={8} className="py-14 text-center">
+                    <div className="max-w-sm mx-auto flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                        <FileSpreadsheet className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-slate-800 text-sm">
+                        {isFiltered ? 'No Vouchers Found' : 'No Purchase Vouchers Recorded Yet'}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 mb-4">
+                        {isFiltered
+                          ? 'No purchase vouchers match your search keyword or selected warehouse.'
+                          : 'Create your first goods receipt voucher to intake inventory into your warehouse.'}
+                      </p>
+                      {isFiltered ? (
+                        <button
+                          onClick={() => {
+                            setSearchQuery('');
+                            setFilterWarehouse('ALL');
+                          }}
+                          className="btn-press px-4 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all"
+                        >
+                          Clear Search Filters
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleOpenModal}
+                          className="btn-press inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm transition-all"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                          <span>Create First Purchase Voucher</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                vouchers.map((v) => (
+                filteredVouchers.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/70">
@@ -305,6 +540,25 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Draft Restored Banner */}
+              {hasRestoredDraft && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span>Restored your unsaved draft from a previous session.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:text-amber-950 bg-amber-100/80 hover:bg-amber-200 rounded-lg transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Discard Draft</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Top Level Error Alert */}
               {errorMsg && (
                 <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs shadow-2xs">
                   {errorMsg}
@@ -322,9 +576,26 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                     required
                     placeholder="e.g. Pakistan Cables Ltd. / Espressif Karachi"
                     value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    className="w-full bg-slate-100/70 hover:bg-slate-100 focus:bg-white border border-slate-200/80 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 transition-all"
+                    onChange={(e) => {
+                      setSupplierName(e.target.value);
+                      if (validationErrors?.fieldErrors.partyName) {
+                        setValidationErrors({
+                          ...validationErrors,
+                          fieldErrors: { ...validationErrors.fieldErrors, partyName: undefined },
+                        });
+                      }
+                    }}
+                    className={`w-full bg-slate-100/70 hover:bg-slate-100 focus:bg-white border rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none transition-all ${
+                      validationErrors?.fieldErrors.partyName
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10 bg-rose-50/10'
+                        : 'border-slate-200/80 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10'
+                    }`}
                   />
+                  {validationErrors?.fieldErrors.partyName && (
+                    <p className="text-[11px] text-rose-600 mt-1 font-medium">
+                      {validationErrors.fieldErrors.partyName}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -335,8 +606,20 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                     <Building2 className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <select
                       value={warehouseId}
-                      onChange={(e) => setWarehouseId(e.target.value)}
-                      className="w-full bg-slate-100/70 hover:bg-slate-100 focus:bg-white border border-slate-200/80 rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-500/60 cursor-pointer"
+                      onChange={(e) => {
+                        setWarehouseId(e.target.value);
+                        if (validationErrors?.fieldErrors.warehouseId) {
+                          setValidationErrors({
+                            ...validationErrors,
+                            fieldErrors: { ...validationErrors.fieldErrors, warehouseId: undefined },
+                          });
+                        }
+                      }}
+                      className={`w-full bg-slate-100/70 hover:bg-slate-100 focus:bg-white border rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:outline-none cursor-pointer ${
+                        validationErrors?.fieldErrors.warehouseId
+                          ? 'border-rose-400 focus:border-rose-500'
+                          : 'border-slate-200/80 focus:border-emerald-500/60'
+                      }`}
                     >
                       {warehouses.map((w) => (
                         <option key={w.id} value={w.id}>
@@ -345,22 +628,61 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                       ))}
                     </select>
                   </div>
+                  {validationErrors?.fieldErrors.warehouseId && (
+                    <p className="text-[11px] text-rose-600 mt-1 font-medium">
+                      {validationErrors.fieldErrors.warehouseId}
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Second Row: Date & Supplier Bill # */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Date
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Date *
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate(todayStr)}
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                          date === todayStr
+                            ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate(yesterdayStr)}
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                          date === yesterdayStr
+                            ? 'bg-emerald-100 text-emerald-800 font-semibold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Yesterday
+                      </button>
+                    </div>
+                  </div>
                   <div className="relative">
                     <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="date"
                       required
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={(e) => {
+                        setDate(e.target.value);
+                        if (validationErrors?.fieldErrors.date) {
+                          setValidationErrors({
+                            ...validationErrors,
+                            fieldErrors: { ...validationErrors.fieldErrors, date: undefined },
+                          });
+                        }
+                      }}
                       className="w-full bg-slate-100/70 hover:bg-slate-100 focus:bg-white border border-slate-200/80 rounded-xl pl-8 pr-3 py-2 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:border-emerald-500/60"
                     />
                   </div>
@@ -393,12 +715,17 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                 </div>
               </div>
 
-              {/* Line Items Table */}
+              {/* Line Items Section */}
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Purchased Line Items
-                  </label>
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Purchased Line Items ({lineItems.length})
+                    </label>
+                    <span className="text-[11px] text-slate-400 ml-2 hidden sm:inline">
+                      Press <kbd className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200">Enter</kbd> to add row
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={handleAddLine}
@@ -413,7 +740,7 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-200/80 bg-slate-50/70 text-slate-500 font-semibold uppercase text-[10px]">
-                        <th className="py-2.5 px-3">Product</th>
+                        <th className="py-2.5 px-3">Product Catalog Item</th>
                         <th className="py-2.5 px-2">Brand & UOM</th>
                         <th className="py-2.5 px-2 text-right w-24">Qty In</th>
                         <th className="py-2.5 px-2 text-right w-28">Rate (Rs.)</th>
@@ -422,60 +749,89 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-sans">
-                      {calculatedLines.map((line, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/60">
-                          <td className="py-2 px-3">
-                            <select
-                              value={line.productId}
-                              onChange={(e) => handleProductChange(idx, e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1.5 text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:border-emerald-500"
-                            >
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.sku} — {p.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-2 px-2 whitespace-nowrap text-slate-500">
-                            <span className="font-semibold text-slate-700">{line.product?.brand}</span>
-                            <span className="text-[11px] text-slate-400 ml-1">({line.product?.uom})</span>
-                          </td>
-                          <td className="py-2 px-2 text-right">
-                            <input
-                              type="number"
-                              min="1"
-                              value={line.quantity}
-                              onChange={(e) => handleQtyChange(idx, e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:border-emerald-500"
-                            />
-                          </td>
-                          <td className="py-2 px-2 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unitPrice}
-                              onChange={(e) => handlePriceChange(idx, e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:border-emerald-500"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
-                            {formatPKR(line.lineTotal)}
-                          </td>
-                          <td className="py-2 px-2 text-center">
-                            {lineItems.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLine(idx)}
-                                className="text-slate-400 hover:text-rose-600 p-1"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {calculatedLines.map((line, idx) => {
+                        const lineErr = validationErrors?.lineErrors[idx];
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/60">
+                            <td className="py-2 px-3">
+                              <SearchableSelect
+                                options={products.map((p) => ({
+                                  value: p.id,
+                                  label: `[${p.sku}] ${p.name}`,
+                                  subLabel: `${p.brand} • ${p.type} (${p.uom})`,
+                                }))}
+                                value={line.productId}
+                                onChange={(val) => handleProductChange(idx, val)}
+                                accentColor="emerald"
+                                hasError={Boolean(lineErr?.productId)}
+                              />
+                              {lineErr?.productId && (
+                                <p className="text-[10px] text-rose-600 mt-1 font-medium">
+                                  {lineErr.productId}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 whitespace-nowrap text-slate-500">
+                              <span className="font-semibold text-slate-700">{line.product?.brand}</span>
+                              <span className="text-[11px] text-slate-400 ml-1">({line.product?.uom})</span>
+                            </td>
+                            <td className="py-2 px-2 text-right">
+                              <input
+                                type="number"
+                                min="1"
+                                value={line.quantity}
+                                onChange={(e) => handleQtyChange(idx, e.target.value)}
+                                onKeyDown={(e) => handleLineKeyDown(e, idx)}
+                                className={`w-full bg-slate-50 border rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none ${
+                                  lineErr?.quantity
+                                    ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10'
+                                    : 'border-slate-200/80 focus:border-emerald-500'
+                                }`}
+                              />
+                              {lineErr?.quantity && (
+                                <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
+                                  {lineErr.quantity}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={line.unitPrice}
+                                onChange={(e) => handlePriceChange(idx, e.target.value)}
+                                onKeyDown={(e) => handleLineKeyDown(e, idx)}
+                                className={`w-full bg-slate-50 border rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none ${
+                                  lineErr?.unitPrice
+                                    ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10'
+                                    : 'border-slate-200/80 focus:border-emerald-500'
+                                }`}
+                              />
+                              {lineErr?.unitPrice && (
+                                <p className="text-[10px] text-rose-600 mt-0.5 text-right font-medium">
+                                  {lineErr.unitPrice}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                              {formatPKR(line.lineTotal)}
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              {lineItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLine(idx)}
+                                  className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -599,3 +955,4 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     </div>
   );
 };
+

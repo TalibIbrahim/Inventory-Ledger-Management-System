@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useInventoryLedger } from './hooks/useInventoryLedger';
 import { useAuth } from './contexts/AuthContext';
 import { LoginView } from './components/auth/LoginView';
@@ -16,6 +16,11 @@ import { LocationView } from './components/inventory/LocationView';
 import { SettingsView } from './components/SettingsView';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
+import {
+  ChangelogModal,
+  CURRENT_APP_VERSION,
+  CHANGELOG_STORAGE_KEY,
+} from './components/ChangelogModal';
 
 export function App() {
   const { isAuthenticated } = useAuth();
@@ -46,6 +51,23 @@ export function App() {
   // Navigation State
   const [activeSection, setActiveSection] = useState<MainSection>('purchase');
   const [activeSubOption, setActiveSubOption] = useState<SubOption>('purchase_voucher');
+
+  // Changelog Modal State (auto-opens first time v1.0.4 is run)
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      const lastSeen = localStorage.getItem(CHANGELOG_STORAGE_KEY);
+      if (lastSeen !== CURRENT_APP_VERSION) {
+        setIsChangelogOpen(true);
+      }
+    }
+  }, [isAuthenticated]);
+
+  const handleCloseChangelog = () => {
+    localStorage.setItem(CHANGELOG_STORAGE_KEY, CURRENT_APP_VERSION);
+    setIsChangelogOpen(false);
+  };
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -217,6 +239,7 @@ export function App() {
         onSelectSection={(sec) => setActiveSection(sec)}
         onSelectSubOption={(sub) => setActiveSubOption(sub)}
         onClearData={handleClearData}
+        onOpenChangelog={() => setIsChangelogOpen(true)}
       />
 
       {/* Main Module View Port */}
@@ -315,7 +338,9 @@ export function App() {
         )}
 
         {/* SECTION 4: SETTINGS */}
-        {activeSection === 'settings' && <SettingsView />}
+        {activeSection === 'settings' && (
+          <SettingsView onOpenChangelog={() => setIsChangelogOpen(true)} />
+        )}
       </main>
 
       {/* Footer */}
@@ -332,6 +357,9 @@ export function App() {
 
       {/* Toast Feedback */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+      {/* What's New in v1.0.4 Changelog Modal */}
+      <ChangelogModal isOpen={isChangelogOpen} onClose={handleCloseChangelog} />
     </div>
   );
 }
