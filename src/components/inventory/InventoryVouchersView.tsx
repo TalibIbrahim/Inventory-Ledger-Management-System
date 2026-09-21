@@ -16,6 +16,7 @@ import {
   Sparkles,
   AlertTriangle,
 } from 'lucide-react';
+import { SearchableSelect } from '../SearchableSelect';
 
 interface InventoryVouchersViewProps {
   products: Product[];
@@ -485,23 +486,21 @@ export const InventoryVouchersView: React.FC<InventoryVouchersViewProps> = ({
                       className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 grid grid-cols-12 gap-3 items-center"
                     >
                       <div className="col-span-6">
-                        <select
+                        <SearchableSelect
+                          options={products.map((p) => ({
+                            value: p.id,
+                            label: `[${p.sku}] ${p.name}`,
+                            subLabel: `${p.brand} • ${p.type} (${p.uom})`,
+                          }))}
                           value={line.productId}
-                          onChange={(e) => {
+                          onChange={(value) => {
                             const updated = [...osLines];
-                            updated[idx].productId = e.target.value;
-                            const p = products.find((prod) => prod.id === e.target.value);
+                            updated[idx].productId = value;
+                            const p = products.find((prod) => prod.id === value);
                             if (p) updated[idx].unitCost = p.purchasePrice.toString();
                             setOsLines(updated);
                           }}
-                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                        >
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              [{p.sku}] {p.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
                       <div className="col-span-3">
                         <input
@@ -673,21 +672,19 @@ export const InventoryVouchersView: React.FC<InventoryVouchersViewProps> = ({
                       className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 grid grid-cols-12 gap-3 items-center"
                     >
                       <div className="col-span-5">
-                        <select
+                        <SearchableSelect
+                          options={products.map((p) => ({
+                            value: p.id,
+                            label: `[${p.sku}] ${p.name}`,
+                            subLabel: `${p.brand} • ${p.type} (${p.uom})`,
+                          }))}
                           value={line.productId}
-                          onChange={(e) => {
+                          onChange={(value) => {
                             const updated = [...saLines];
-                            updated[idx].productId = e.target.value;
+                            updated[idx].productId = value;
                             setSaLines(updated);
                           }}
-                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                        >
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              [{p.sku}] {p.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
                       <div className="col-span-2">
                         <input

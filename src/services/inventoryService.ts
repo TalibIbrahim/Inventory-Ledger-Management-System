@@ -1046,8 +1046,12 @@ export class InventoryService {
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      
+      // Delay cleanup to ensure Chrome reads the download attribute correctly
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
     }
   }
 
