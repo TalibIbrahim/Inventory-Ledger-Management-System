@@ -14,6 +14,7 @@ import {
   Scale,
   History,
 } from 'lucide-react';
+import { SearchableSelect } from '../SearchableSelect';
 
 interface InventoryReportsViewProps {
   products: Product[];
@@ -447,18 +448,17 @@ export const InventoryReportsView: React.FC<InventoryReportsViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-medium text-slate-500 mb-1">Filter by Product</label>
-                <select
+                <SearchableSelect
+                  options={[
+                    { value: 'ALL', label: 'All Products (Full Ledger)' },
+                    ...products.map((p) => ({
+                      value: p.id,
+                      label: `[${p.sku}] ${p.name}`,
+                    })),
+                  ]}
                   value={ledgerProductFilter}
-                  onChange={(e) => setLedgerProductFilter(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-700"
-                >
-                  <option value="ALL">All Products (Full Ledger)</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      [{p.sku}] {p.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setLedgerProductFilter(value)}
+                />
               </div>
 
               <div>
