@@ -179,10 +179,10 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={onOpenChangelog}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs"
-                    title="What's New in v1.0.8 (Auto-Updates & More)"
+                    title="What's New in v1.0.9 (Auto-Updates & More)"
                   >
                     <Sparkles className="w-3 h-3 text-indigo-500" />
-                    <span>v1.0.8 What's New</span>
+                    <span>v1.0.9 What's New</span>
                   </button>
                 )}
               </div>
