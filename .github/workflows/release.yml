@@ -43,9 +43,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Undraft & Publish Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          echo "Publishing GitHub release for ${{ github.ref_name }}..."
-          gh release edit "${{ github.ref_name }}" --draft=false
+          echo "Publishing GitHub release for tag ${{ github.ref_name }} in repo ${{ github.repository }}..."
+          gh release edit "${{ github.ref_name }}" --draft=false --latest
