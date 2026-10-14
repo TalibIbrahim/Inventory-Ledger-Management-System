@@ -65,6 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
     version?: string;
     percent?: number;
+    message?: string;
   }>({ status: 'idle' });
 
   useEffect(() => {
@@ -86,6 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
             status: data.status === 'not-available' ? 'idle' : data.status as any,
             version: data.version,
             percent: data.percent,
+            message: data.message,
           });
         });
       }
@@ -95,6 +97,12 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       {/* ── Auto-Update Banner ───────────────────────────────────────── */}
+      {updateStatus.status === 'available' && (
+        <div className="sticky top-0 z-50 bg-indigo-600 text-white px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2">
+          <Download className="w-3.5 h-3.5 animate-bounce" />
+          <span>Update v{updateStatus.version} found! Starting download…</span>
+        </div>
+      )}
       {updateStatus.status === 'downloading' && (
         <div className="sticky top-0 z-50 bg-blue-600 text-white px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2">
           <Download className="w-3.5 h-3.5 animate-bounce" />
@@ -108,15 +116,27 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
       {updateStatus.status === 'ready' && (
-        <div className="sticky top-0 z-50 bg-emerald-600 text-white px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-3">
-          <Download className="w-3.5 h-3.5" />
+        <div className="sticky top-0 z-50 bg-emerald-600 text-white px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-3 shadow-md animate-in slide-in-from-top duration-200">
+          <Download className="w-4 h-4" />
           <span>Update v{updateStatus.version} is ready!</span>
           <button
             onClick={() => window.electronAPI?.installUpdate()}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white text-emerald-700 font-bold text-xs shadow-sm hover:bg-emerald-50 active:scale-[0.97] transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-lg bg-white text-emerald-800 font-bold text-xs shadow-sm hover:bg-emerald-50 active:scale-[0.97] transition-all cursor-pointer ring-1 ring-emerald-700/20"
           >
-            <RefreshCw className="w-3 h-3" />
+            <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
             Restart To Update
+          </button>
+        </div>
+      )}
+      {updateStatus.status === 'error' && updateStatus.message && (
+        <div className="sticky top-0 z-50 bg-slate-800 text-white px-4 py-1.5 text-center text-xs font-medium flex items-center justify-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+          <span>Update Notice: {updateStatus.message}</span>
+          <button
+            onClick={() => setUpdateStatus({ status: 'idle' })}
+            className="ml-2 px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[10px] text-slate-200 cursor-pointer"
+          >
+            Dismiss
           </button>
         </div>
       )}
