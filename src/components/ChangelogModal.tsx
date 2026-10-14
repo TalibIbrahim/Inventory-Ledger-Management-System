@@ -11,7 +11,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
-export const CURRENT_APP_VERSION = '1.0.7';
+export const CURRENT_APP_VERSION = '1.0.8';
 export const CHANGELOG_STORAGE_KEY = 'axiom_last_seen_changelog_version';
 
 interface ChangelogModalProps {

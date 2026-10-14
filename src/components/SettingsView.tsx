@@ -127,7 +127,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenChangelog }) =
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Axiom Stock Ledger</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  v1.0.7
+                  v1.0.8
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -156,7 +156,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenChangelog }) =
                   className="btn-press inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs self-start sm:self-auto"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>v1.0.7 What's New</span>
+                  <span>v1.0.8 What's New</span>
                 </button>
               )}
             </div>
