@@ -17,6 +17,15 @@ declare global {
       restartApp: () => Promise<void>;
       getSyncStatus: () => Promise<'syncing' | 'synced' | 'error' | 'offline'>;
       onSyncStatus: (callback: (status: 'syncing' | 'synced' | 'error' | 'offline') => void) => void;
+      // Auto-updater
+      checkForUpdate: () => Promise<void>;
+      installUpdate: () => Promise<void>;
+      onUpdateStatus: (callback: (data: {
+        status: 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error';
+        version?: string;
+        percent?: number;
+        message?: string;
+      }) => void) => void;
     };
   }
 }

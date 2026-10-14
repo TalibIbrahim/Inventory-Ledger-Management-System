@@ -1,7 +1,7 @@
 {
   "name": "inventory-management",
   "private": true,
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Axiom Stock Ledger",
   "author": "Talib Ibrahim",
   "repository": {
@@ -21,6 +21,8 @@
   "dependencies": {
     "@seald-io/nedb": "^4.1.2",
     "bcryptjs": "^3.0.3",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.45.0",
     "mongodb": "^7.6.0",
     "mongoose": "^9.10.0",

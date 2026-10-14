@@ -7,6 +7,8 @@ import type { MainSection, SubOption } from './components/Header';
 import { PurchaseVoucherView } from './components/purchase/PurchaseVoucherView';
 import { PurchaseReportsView } from './components/purchase/PurchaseReportsView';
 import { SaleVoucherView } from './components/sales/SaleVoucherView';
+import { CustomerAccountsView } from './components/sales/CustomerAccountsView';
+import { MonthlySalesReportView } from './components/sales/MonthlySalesReportView';
 import { SaleReturnView } from './components/sales/SaleReturnView';
 import { SalesReportsView } from './components/sales/SalesReportsView';
 import { ProductInfoView } from './components/inventory/ProductInfoView';
@@ -21,6 +23,7 @@ import {
   CURRENT_APP_VERSION,
   CHANGELOG_STORAGE_KEY,
 } from './components/ChangelogModal';
+import { formatPKR } from './utils/currency';
 
 export function App() {
   const { isAuthenticated } = useAuth();
@@ -44,6 +47,8 @@ export function App() {
     createSaleReturn,
     createOpeningStockVoucher,
     createStockAdjustmentVoucher,
+    recordCustomerPayment,
+    recordCustomerAccountPayment,
     getProductStockAtWarehouse,
     clearAllData,
   } = useInventoryLedger();
@@ -123,6 +128,34 @@ export function App() {
       );
     } else {
       addToast('error', 'Return Processing Failed', res.error);
+    }
+    return res;
+  };
+
+  const handleRecordCustomerPayment = async (input: any) => {
+    const res = await recordCustomerPayment(input);
+    if (res.success && res.voucher) {
+      addToast(
+        'success',
+        `Payment Recorded: ${res.voucher.invoiceNo}`,
+        `Credited ${formatPKR(Number(input.amount) || 0)} from ${res.voucher.customerName}.`
+      );
+    } else {
+      addToast('error', 'Payment Failed', res.error);
+    }
+    return res;
+  };
+
+  const handleRecordCustomerAccountPayment = async (input: any) => {
+    const res = await recordCustomerAccountPayment(input);
+    if (res.success) {
+      addToast(
+        'success',
+        `Account Payment Recorded: ${input.customerName}`,
+        `Allocated ${formatPKR(Number(input.amount) || 0)} across ${res.paidInvoicesCount} invoices.`
+      );
+    } else {
+      addToast('error', 'Payment Allocation Failed', res.error);
     }
     return res;
   };
@@ -275,6 +308,23 @@ export function App() {
                 vouchers={saleVouchers}
                 onCreateVoucher={handleCreateSaleVoucher}
                 getProductStockAtWarehouse={getProductStockAtWarehouse}
+              />
+            )}
+            {activeSubOption === 'customer_accounts' && (
+              <CustomerAccountsView
+                saleVouchers={saleVouchers}
+                saleReturns={saleReturns}
+                onRecordPayment={handleRecordCustomerPayment}
+                onRecordAccountPayment={handleRecordCustomerAccountPayment}
+              />
+            )}
+            {activeSubOption === 'monthly_sales' && (
+              <MonthlySalesReportView
+                products={products}
+                warehouses={warehouses}
+                saleVouchers={saleVouchers}
+                saleReturns={saleReturns}
+                onRecordPayment={handleRecordCustomerPayment}
               />
             )}
             {activeSubOption === 'sale_return' && (

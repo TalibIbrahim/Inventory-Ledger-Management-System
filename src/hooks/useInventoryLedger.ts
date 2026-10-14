@@ -111,8 +111,46 @@ export function useInventoryLedger() {
       items: Array<{ productId: string; quantity: number; unitPrice: number }>;
       notes?: string;
       recordedBy: string;
+      paymentStatus?: 'PAID' | 'PAYMENT_DUE' | 'PARTIAL';
+      paidAmount?: number;
+      paymentMethod?: string;
+      dueDate?: string;
     }) => {
       const res = await InventoryService.createSaleVoucher(input);
+      if (res.success) refreshAll();
+      return res;
+    },
+    [refreshAll]
+  );
+
+  const recordCustomerPayment = useCallback(
+    async (input: {
+      voucherId: string;
+      amount: number;
+      date?: string;
+      paymentMethod: string;
+      referenceNo?: string;
+      notes?: string;
+      recordedBy: string;
+    }) => {
+      const res = await InventoryService.recordCustomerPayment(input);
+      if (res.success) refreshAll();
+      return res;
+    },
+    [refreshAll]
+  );
+
+  const recordCustomerAccountPayment = useCallback(
+    async (input: {
+      customerName: string;
+      amount: number;
+      date?: string;
+      paymentMethod: string;
+      referenceNo?: string;
+      notes?: string;
+      recordedBy: string;
+    }) => {
+      const res = await InventoryService.recordCustomerAccountPayment(input);
       if (res.success) refreshAll();
       return res;
     },
@@ -192,6 +230,17 @@ export function useInventoryLedger() {
     const totalPurchasesAmount = purchaseVouchers.reduce((acc, pv) => acc + pv.totalAmount, 0);
     const totalSalesAmount = saleVouchers.reduce((acc, sv) => acc + sv.totalAmount, 0);
     const totalReturnsAmount = saleReturns.reduce((acc, sr) => acc + sr.totalAmount, 0);
+    const totalSalesPaid = saleVouchers.reduce(
+      (acc, sv) => acc + (sv.paidAmount ?? (sv.paymentStatus === 'PAYMENT_DUE' ? 0 : sv.totalAmount)),
+      0
+    );
+    const totalReceivablesDue = saleVouchers.reduce(
+      (acc, sv) =>
+        acc +
+        (sv.dueAmount ??
+          (sv.paymentStatus === 'PAYMENT_DUE' ? sv.totalAmount : 0)),
+      0
+    );
 
     return {
       totalInventoryValue,
@@ -201,6 +250,8 @@ export function useInventoryLedger() {
       totalPurchasesAmount,
       totalSalesAmount,
       totalReturnsAmount,
+      totalSalesPaid,
+      totalReceivablesDue,
       totalProductsCount: products.length,
       totalWarehousesCount: warehouses.length,
       ledgerEntriesCount: ledger.length,
@@ -234,6 +285,8 @@ export function useInventoryLedger() {
     createSaleReturn,
     createOpeningStockVoucher,
     createStockAdjustmentVoucher,
+    recordCustomerPayment,
+    recordCustomerAccountPayment,
     getProductStockAtWarehouse,
     clearAllData,
     refreshAll,

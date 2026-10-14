@@ -12,7 +12,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['mongodb', '@seald-io/nedb']
+              external: ['mongodb', '@seald-io/nedb', 'electron-updater']
             }
           }
         }

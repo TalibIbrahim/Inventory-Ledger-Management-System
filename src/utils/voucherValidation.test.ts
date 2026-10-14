@@ -125,7 +125,26 @@ test('voucherDrafts: correctly detects substantive drafts', () => {
       notes: '',
       recordedBy: 'Admin',
       lineItems: [],
+      paymentStatus: 'PAYMENT_DUE',
     }),
     true
   );
+});
+
+test('voucherDrafts: retains payment status options in draft data', () => {
+  const draft = {
+    customerName: 'AeroTech Systems',
+    warehouseId: 'w1',
+    date: '2026-10-14',
+    notes: 'Credit terms Net 15',
+    recordedBy: 'Admin',
+    lineItems: [{ productId: 'p1', quantity: '5', unitPrice: '100' }],
+    paymentStatus: 'PAYMENT_DUE' as const,
+    paymentMethod: 'CREDIT',
+    dueDate: '2026-10-29',
+  };
+
+  assert.strictEqual(isSaleDraftSubstantive(draft), true);
+  assert.strictEqual(draft.paymentStatus, 'PAYMENT_DUE');
+  assert.strictEqual(draft.dueDate, '2026-10-29');
 });
