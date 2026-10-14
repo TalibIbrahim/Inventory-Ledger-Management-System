@@ -74,6 +74,23 @@ export interface SaleVoucherLine {
   totalPrice: number; // Rs.
 }
 
+export type PaymentStatus = 'PAID' | 'PAYMENT_DUE' | 'PARTIAL';
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE' | 'CREDIT';
+
+export interface PaymentRecord {
+  id: string;
+  voucherId: string;
+  invoiceNo: string;
+  customerName: string;
+  date: string;
+  amount: number;
+  paymentMethod: PaymentMethod | string;
+  referenceNo?: string;
+  notes?: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
 export interface SaleVoucher {
   id: string;
   invoiceNo: string; // e.g. "INV-2026-0001"
@@ -87,6 +104,12 @@ export interface SaleVoucher {
   notes: string;
   recordedBy: string;
   createdAt: string;
+  paymentStatus?: PaymentStatus; // Defaults to 'PAID' if omitted
+  paidAmount?: number; // Rs. collected so far
+  dueAmount?: number; // Rs. outstanding
+  paymentMethod?: PaymentMethod | string;
+  dueDate?: string;
+  paymentHistory?: PaymentRecord[];
 }
 
 // Sale Return Line Item & Voucher

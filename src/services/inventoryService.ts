@@ -12,7 +12,20 @@ import type {
   StockAdjustmentVoucher,
   StockAdjustmentLine,
   StockLedgerEntry,
+  PaymentStatus,
+  PaymentRecord,
+  PaymentMethod,
 } from '../types/inventory';
+import {
+  INITIAL_WAREHOUSES,
+  INITIAL_PRODUCTS,
+  INITIAL_PURCHASE_VOUCHERS,
+  INITIAL_SALE_VOUCHERS,
+  INITIAL_SALE_RETURNS,
+  INITIAL_OPENING_STOCK,
+  INITIAL_STOCK_ADJUSTMENTS,
+  INITIAL_LEDGER,
+} from '../data/mockData';
 export const DEFAULT_WAREHOUSES: Warehouse[] = [];
 
 const PRODUCTS_KEY = 'ledger_live_products_v1';
@@ -72,21 +85,41 @@ export class InventoryService {
       }
     } else {
       // Fallback to localStorage for browser dev mode
-      this.cache.products = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || '[]');
-      this.cache.warehouses = JSON.parse(localStorage.getItem(WAREHOUSES_KEY) || '[]');
-      // One-time migration: remove hardcoded seed warehouses from localStorage
-      const SEED_IDS_LS = ['wh-01', 'wh-02', 'wh-03'];
-      const hadSeeds = this.cache.warehouses.some((w: Warehouse) => SEED_IDS_LS.includes(w.id));
-      if (hadSeeds) {
-        this.cache.warehouses = this.cache.warehouses.filter((w: Warehouse) => !SEED_IDS_LS.includes(w.id));
-        localStorage.setItem(WAREHOUSES_KEY, JSON.stringify(this.cache.warehouses));
+      const rawProducts = localStorage.getItem(PRODUCTS_KEY);
+      this.cache.products = rawProducts !== null ? JSON.parse(rawProducts) : INITIAL_PRODUCTS;
+
+      const rawWarehouses = localStorage.getItem(WAREHOUSES_KEY);
+      this.cache.warehouses = rawWarehouses !== null ? JSON.parse(rawWarehouses) : INITIAL_WAREHOUSES;
+
+      const rawPv = localStorage.getItem(PV_KEY);
+      this.cache.pv = rawPv !== null ? JSON.parse(rawPv) : INITIAL_PURCHASE_VOUCHERS;
+
+      const rawSv = localStorage.getItem(SV_KEY);
+      this.cache.sv = rawSv !== null ? JSON.parse(rawSv) : INITIAL_SALE_VOUCHERS;
+
+      const rawSr = localStorage.getItem(SR_KEY);
+      this.cache.sr = rawSr !== null ? JSON.parse(rawSr) : INITIAL_SALE_RETURNS;
+
+      const rawOs = localStorage.getItem(OS_KEY);
+      this.cache.os = rawOs !== null ? JSON.parse(rawOs) : INITIAL_OPENING_STOCK;
+
+      const rawSa = localStorage.getItem(SA_KEY);
+      this.cache.sa = rawSa !== null ? JSON.parse(rawSa) : INITIAL_STOCK_ADJUSTMENTS;
+
+      const rawLedger = localStorage.getItem(LEDGER_KEY);
+      this.cache.ledger = rawLedger !== null ? JSON.parse(rawLedger) : INITIAL_LEDGER;
+
+      // In browser dev mode, if no sale vouchers or products exist, pre-populate initial datasets
+      if (this.cache.sv.length === 0 && (!rawSv || rawSv === '[]')) {
+        this.cache.sv = [...INITIAL_SALE_VOUCHERS];
+        this.cache.products = [...INITIAL_PRODUCTS];
+        this.cache.warehouses = [...INITIAL_WAREHOUSES];
+        this.cache.pv = [...INITIAL_PURCHASE_VOUCHERS];
+        this.cache.sr = [...INITIAL_SALE_RETURNS];
+        this.cache.os = [...INITIAL_OPENING_STOCK];
+        this.cache.sa = [...INITIAL_STOCK_ADJUSTMENTS];
+        this.cache.ledger = [...INITIAL_LEDGER];
       }
-      this.cache.pv = JSON.parse(localStorage.getItem(PV_KEY) || '[]');
-      this.cache.sv = JSON.parse(localStorage.getItem(SV_KEY) || '[]');
-      this.cache.sr = JSON.parse(localStorage.getItem(SR_KEY) || '[]');
-      this.cache.os = JSON.parse(localStorage.getItem(OS_KEY) || '[]');
-      this.cache.sa = JSON.parse(localStorage.getItem(SA_KEY) || '[]');
-      this.cache.ledger = JSON.parse(localStorage.getItem(LEDGER_KEY) || '[]');
     }
     
     this.isInitialized = true;
@@ -501,6 +534,10 @@ export class InventoryService {
     items: Array<{ productId: string; quantity: number; unitPrice: number }>;
     notes?: string;
     recordedBy: string;
+    paymentStatus?: PaymentStatus;
+    paidAmount?: number;
+    paymentMethod?: string;
+    dueDate?: string;
   }): Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }> {
     if (!input.customerName.trim()) return { success: false, error: 'Customer name is required.' };
     if (!input.warehouseId) return { success: false, error: 'Please select a dispatch warehouse.' };
@@ -597,6 +634,34 @@ export class InventoryService {
       newLedgerEntries.push(ledgerEntry);
     }
 
+    // Payment details computation
+    const chosenStatus = input.paymentStatus || 'PAID';
+    let initialPaid = 0;
+    if (chosenStatus === 'PAID') {
+      initialPaid = totalAmount;
+    } else if (input.paidAmount !== undefined) {
+      initialPaid = Math.min(totalAmount, Math.max(0, Number(input.paidAmount) || 0));
+    }
+    const dueAmount = Math.max(0, totalAmount - initialPaid);
+    const resolvedStatus: PaymentStatus =
+      dueAmount === 0 ? 'PAID' : initialPaid > 0 ? 'PARTIAL' : 'PAYMENT_DUE';
+
+    const paymentHistory: PaymentRecord[] = [];
+    if (initialPaid > 0) {
+      paymentHistory.push({
+        id: `pay-${voucherId}-init`,
+        voucherId,
+        invoiceNo,
+        customerName: input.customerName.trim(),
+        date: input.date || new Date().toISOString().slice(0, 10),
+        amount: initialPaid,
+        paymentMethod: input.paymentMethod || (resolvedStatus === 'PAID' ? 'CASH' : 'CREDIT'),
+        notes: resolvedStatus === 'PAID' ? 'Settled on dispatch (Cash on Hand)' : 'Initial upfront payment',
+        recordedBy: input.recordedBy.trim() || 'System Operator',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
     const newVoucher: SaleVoucher = {
       id: voucherId,
       invoiceNo,
@@ -610,6 +675,16 @@ export class InventoryService {
       notes: input.notes?.trim() || '',
       recordedBy: input.recordedBy.trim() || 'System Operator',
       createdAt: new Date().toISOString(),
+      paymentStatus: resolvedStatus,
+      paidAmount: initialPaid,
+      dueAmount,
+      paymentMethod: input.paymentMethod || (resolvedStatus === 'PAID' ? 'CASH' : 'CREDIT'),
+      dueDate:
+        input.dueDate ||
+        (resolvedStatus !== 'PAID'
+          ? new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)
+          : undefined),
+      paymentHistory,
     };
 
     await this.saveSaleVouchers([newVoucher, ...svList]);
@@ -623,6 +698,125 @@ export class InventoryService {
     }
 
     return { success: true, voucher: newVoucher };
+  }
+
+  static async recordCustomerPayment(input: {
+    voucherId: string;
+    amount: number;
+    date?: string;
+    paymentMethod: PaymentMethod | string;
+    referenceNo?: string;
+    notes?: string;
+    recordedBy: string;
+  }): Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }> {
+    const svList = this.getSaleVouchers();
+    const index = svList.findIndex((v) => v.id === input.voucherId);
+    if (index === -1) {
+      return { success: false, error: 'Invoice not found.' };
+    }
+
+    const voucher = { ...svList[index] };
+    const payAmount = Math.max(0, Number(input.amount) || 0);
+    if (payAmount <= 0) {
+      return { success: false, error: 'Payment amount must be greater than 0.' };
+    }
+
+    const currentPaid = voucher.paidAmount ?? (voucher.paymentStatus === 'PAYMENT_DUE' ? 0 : voucher.totalAmount);
+    const newPaid = Math.min(voucher.totalAmount, currentPaid + payAmount);
+    const newDue = Math.max(0, voucher.totalAmount - newPaid);
+    const newStatus: PaymentStatus = newDue === 0 ? 'PAID' : 'PARTIAL';
+
+    const payRecord: PaymentRecord = {
+      id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      voucherId: voucher.id,
+      invoiceNo: voucher.invoiceNo,
+      customerName: voucher.customerName,
+      date: input.date || new Date().toISOString().slice(0, 10),
+      amount: payAmount,
+      paymentMethod: input.paymentMethod || 'CASH',
+      referenceNo: input.referenceNo?.trim(),
+      notes: input.notes?.trim() || 'Payment received from customer',
+      recordedBy: input.recordedBy.trim() || 'System Operator',
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedVoucher: SaleVoucher = {
+      ...voucher,
+      paidAmount: newPaid,
+      dueAmount: newDue,
+      paymentStatus: newStatus,
+      paymentMethod: input.paymentMethod || voucher.paymentMethod,
+      paymentHistory: [...(voucher.paymentHistory || []), payRecord],
+    };
+
+    svList[index] = updatedVoucher;
+    await this.saveSaleVouchers(svList);
+
+    if (window.electronAPI) {
+      await window.electronAPI.db.update('saleVouchers', { id: updatedVoucher.id }, updatedVoucher);
+    }
+
+    return { success: true, voucher: updatedVoucher };
+  }
+
+  static async recordCustomerAccountPayment(input: {
+    customerName: string;
+    amount: number;
+    date?: string;
+    paymentMethod: PaymentMethod | string;
+    referenceNo?: string;
+    notes?: string;
+    recordedBy: string;
+  }): Promise<{ success: boolean; paidInvoicesCount: number; error?: string }> {
+    const svList = this.getSaleVouchers();
+    let remainingAmount = Math.max(0, Number(input.amount) || 0);
+    if (remainingAmount <= 0) {
+      return { success: false, paidInvoicesCount: 0, error: 'Payment amount must be greater than 0.' };
+    }
+
+    // Find all invoices for this customer with outstanding due, oldest first
+    const customerInvoices = svList
+      .filter((v) => v.customerName.toLowerCase() === input.customerName.toLowerCase())
+      .filter((v) => {
+        const due = v.dueAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? v.totalAmount : 0);
+        return due > 0;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (customerInvoices.length === 0) {
+      return {
+        success: false,
+        paidInvoicesCount: 0,
+        error: `No outstanding balance found for customer "${input.customerName}".`,
+      };
+    }
+
+    let affectedCount = 0;
+    for (const inv of customerInvoices) {
+      if (remainingAmount <= 0) break;
+      const currentPaid = inv.paidAmount ?? (inv.paymentStatus === 'PAYMENT_DUE' ? 0 : inv.totalAmount);
+      const currentDue = inv.dueAmount ?? Math.max(0, inv.totalAmount - currentPaid);
+
+      const allocation = Math.min(currentDue, remainingAmount);
+      if (allocation <= 0) continue;
+
+      const res = await this.recordCustomerPayment({
+        voucherId: inv.id,
+        amount: allocation,
+        date: input.date,
+        paymentMethod: input.paymentMethod,
+        referenceNo: input.referenceNo,
+        notes: input.notes ? `${input.notes} (Account allocation)` : 'Account payment allocation',
+        recordedBy: input.recordedBy,
+      });
+
+      if (res.success) {
+        affectedCount++;
+        remainingAmount -= allocation;
+      }
+    }
+
+    return { success: true, paidInvoicesCount: affectedCount };
   }
 
   // ─── Sale Returns ───────────────────────────────────────────────────────────

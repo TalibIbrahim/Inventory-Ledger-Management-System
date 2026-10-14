@@ -11,7 +11,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
-export const CURRENT_APP_VERSION = '1.0.6';
+export const CURRENT_APP_VERSION = '1.0.7';
 export const CHANGELOG_STORAGE_KEY = 'axiom_last_seen_changelog_version';
 
 interface ChangelogModalProps {
@@ -41,52 +41,52 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
 
   const features = [
     {
+      icon: <Zap className="w-5 h-5 text-emerald-600" />,
+      bg: 'bg-emerald-50 border-emerald-100',
+      title: 'Automatic Updates from GitHub',
+      description:
+        'The app now checks for updates automatically on launch and every 30 minutes. When an update is ready, a "Restart To Update" banner appears — one click and you\'re on the latest version.',
+      shortcut: 'Auto',
+    },
+    {
       icon: <Search className="w-5 h-5 text-blue-600" />,
       bg: 'bg-blue-50 border-blue-100',
-      title: 'Smart Voucher Search & Instant Filters',
+      title: 'Customer Accounts & Credit Ledger',
       description:
-        'Quickly search purchase vouchers and sales invoices by voucher number, supplier/customer name, or product SKU. Reset search in one click.',
-      shortcut: `${modKey}+K`,
-    },
-    {
-      icon: <Package className="w-5 h-5 text-emerald-600" />,
-      bg: 'bg-emerald-50 border-emerald-100',
-      title: 'Searchable Product Catalog Picker',
-      description:
-        'Purchase line items now have a fast searchable selector. Search your entire catalog by SKU, product name, brand, or category with keyboard support.',
-      shortcut: 'Esc to close',
-    },
-    {
-      icon: <Sparkles className="w-5 h-5 text-amber-600" />,
-      bg: 'bg-amber-50 border-amber-100',
-      title: 'Automated Form Drafts & Recovery',
-      description:
-        'Never lose in-progress vouchers if accidentally closed. Forms are safely auto-saved to your device and can be resumed or discarded anytime.',
-      shortcut: 'Auto-saved',
-    },
-    {
-      icon: <Zap className="w-5 h-5 text-purple-600" />,
-      bg: 'bg-purple-50 border-purple-100',
-      title: 'Rapid Keyboard Item Entry',
-      description:
-        'Speed through bulk entry. Pressing Enter inside the quantity or rate field of the last line item instantly adds a new row without touching your mouse.',
-      shortcut: 'Enter on last item',
+        'Track outstanding balances per customer. View all unpaid invoices, record payments against specific sales, and see a complete credit/due summary at a glance.',
+      shortcut: 'Sales → Accounts',
     },
     {
       icon: <Calendar className="w-5 h-5 text-indigo-600" />,
       bg: 'bg-indigo-50 border-indigo-100',
-      title: 'Quick Date Selector Pills',
+      title: 'Monthly Sales Report with Graphs',
       description:
-        'Convenient "Today" and "Yesterday" one-click pills next to voucher date inputs for faster transaction recording.',
-      shortcut: 'Today / Yesterday',
+        'Visualize monthly revenue, margins, and trends with interactive bar charts. Filter by date range, print or export — perfect for month-end reviews.',
+      shortcut: 'Sales → Monthly',
+    },
+    {
+      icon: <Package className="w-5 h-5 text-amber-600" />,
+      bg: 'bg-amber-50 border-amber-100',
+      title: 'Account-Level Payment Allocation',
+      description:
+        'Record a single lump-sum payment against a customer account and have it automatically allocated across their oldest unpaid invoices (FIFO). No more manual per-invoice tracking.',
+      shortcut: 'Auto-allocated',
     },
     {
       icon: <ShieldCheck className="w-5 h-5 text-teal-600" />,
       bg: 'bg-teal-50 border-teal-100',
-      title: 'Real-Time Inline Validation & Stock Guardrails',
+      title: 'Seamless Data Preservation',
       description:
-        'Live feedback highlights specific field issues and prevents dispatching sales quantities that exceed available stock at the selected warehouse.',
-      shortcut: 'Stock Checked',
+        'Your data is stored safely outside the app. Updates — whether automatic or manual — never touch your products, vouchers, ledger, or settings. Everything carries over seamlessly.',
+      shortcut: 'Always safe',
+    },
+    {
+      icon: <Sparkles className="w-5 h-5 text-purple-600" />,
+      bg: 'bg-purple-50 border-purple-100',
+      title: 'Sale Voucher Payment Tracking',
+      description:
+        'Every sale invoice now tracks payment status (Paid, Partial, Unpaid), paid amount, and remaining balance. Record payments directly from the voucher view.',
+      shortcut: 'On each invoice',
     },
   ];
 
@@ -108,7 +108,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
                 Axiom Stock Ledger
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md">
-                We've upgraded your inventory experience with faster search, automated drafts, keyboard shortcuts, and stock guardrails.
+                Automatic updates, customer credit ledger, monthly sales reports, and smarter payment tracking — all designed to save you time.
               </p>
             </div>
 

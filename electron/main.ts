@@ -37,6 +37,7 @@ function createWindow() {
 import { startAutoSync, setMongoUri, getSyncStatus } from './sync';
 import { getConfig, saveConfig } from './config';
 import { initDb } from './db';
+import { initAutoUpdater } from './updater';
 
 app.whenReady().then(() => {
   const config = getConfig();
@@ -50,6 +51,11 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+  
+  // Initialize auto-updater (production only — skip in dev mode)
+  if (!isDev && mainWindow) {
+    initAutoUpdater(mainWindow);
+  }
   
   // Start cloud sync to MongoDB every 60 seconds
   startAutoSync(60000);

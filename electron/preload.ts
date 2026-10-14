@@ -16,5 +16,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
   onSyncStatus: (callback: (status: 'syncing' | 'synced' | 'error' | 'offline') => void) => {
     ipcRenderer.on('sync-status', (_event, status) => callback(status));
-  }
+  },
+  // Auto-updater
+  checkForUpdate: () => ipcRenderer.invoke('updater-check'),
+  installUpdate: () => ipcRenderer.invoke('updater-install'),
+  onUpdateStatus: (callback: (data: any) => void) => {
+    ipcRenderer.on('updater-status', (_event, data) => callback(data));
+  },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PasswordPromptModal } from './auth/PasswordPromptModal';
 import {
   Boxes,
@@ -19,6 +19,9 @@ import {
   RefreshCw,
   AlertCircle,
   Sparkles,
+  Users,
+  Calendar,
+  Download,
 } from 'lucide-react';
 
 export type MainSection = 'purchase' | 'sales' | 'inventory' | 'settings';
@@ -29,6 +32,8 @@ export type SubOption =
   | 'purchase_reports'
   // Sales
   | 'sale_voucher'
+  | 'customer_accounts'
+  | 'monthly_sales'
   | 'sale_return'
   | 'sales_reports'
   // Inventory
@@ -56,8 +61,13 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'synced' | 'error' | 'offline'>('offline');
+  const [updateStatus, setUpdateStatus] = useState<{
+    status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
+    version?: string;
+    percent?: number;
+  }>({ status: 'idle' });
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (window.electronAPI) {
       if (window.electronAPI.getSyncStatus) {
         window.electronAPI.getSyncStatus().then((status) => {
@@ -69,10 +79,48 @@ export const Header: React.FC<HeaderProps> = ({
           setSyncStatus(status);
         });
       }
+      // Listen for auto-updater events
+      if (window.electronAPI.onUpdateStatus) {
+        window.electronAPI.onUpdateStatus((data) => {
+          setUpdateStatus({
+            status: data.status === 'not-available' ? 'idle' : data.status as any,
+            version: data.version,
+            percent: data.percent,
+          });
+        });
+      }
     }
   }, []);
 
   return (
+    <>
+      {/* ── Auto-Update Banner ───────────────────────────────────────── */}
+      {updateStatus.status === 'downloading' && (
+        <div className="sticky top-0 z-50 bg-blue-600 text-white px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-2">
+          <Download className="w-3.5 h-3.5 animate-bounce" />
+          <span>Downloading update v{updateStatus.version}… {updateStatus.percent ?? 0}%</span>
+          <div className="w-32 h-1.5 bg-blue-400/40 rounded-full overflow-hidden ml-2">
+            <div
+              className="h-full bg-white rounded-full transition-all duration-300"
+              style={{ width: `${updateStatus.percent ?? 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+      {updateStatus.status === 'ready' && (
+        <div className="sticky top-0 z-50 bg-emerald-600 text-white px-4 py-2 text-center text-xs font-semibold flex items-center justify-center gap-3">
+          <Download className="w-3.5 h-3.5" />
+          <span>Update v{updateStatus.version} is ready!</span>
+          <button
+            onClick={() => window.electronAPI?.installUpdate()}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white text-emerald-700 font-bold text-xs shadow-sm hover:bg-emerald-50 active:scale-[0.97] transition-all cursor-pointer"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Restart To Update
+          </button>
+        </div>
+      )}
+
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl shadow-xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top bar: Brand & Section Switcher */}
@@ -111,10 +159,10 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={onOpenChangelog}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs"
-                    title="What's New in v1.0.6 (Shortcuts & Features)"
+                    title="What's New in v1.0.7 (Auto-Updates & More)"
                   >
                     <Sparkles className="w-3 h-3 text-indigo-500" />
-                    <span>v1.0.6 What's New</span>
+                    <span>v1.0.7 What's New</span>
                   </button>
                 )}
               </div>
@@ -242,7 +290,7 @@ export const Header: React.FC<HeaderProps> = ({
             <>
               <button
                 onClick={() => onSelectSubOption('sale_voucher')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                   activeSubOption === 'sale_voucher'
                     ? 'bg-blue-600 text-white font-semibold shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -253,8 +301,32 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
+                onClick={() => onSelectSubOption('customer_accounts')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                  activeSubOption === 'customer_accounts'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Customer Accounts (Credit & Due)</span>
+              </button>
+
+              <button
+                onClick={() => onSelectSubOption('monthly_sales')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                  activeSubOption === 'monthly_sales'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Monthly Sales Report (Graph & Print)</span>
+              </button>
+
+              <button
                 onClick={() => onSelectSubOption('sale_return')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                   activeSubOption === 'sale_return'
                     ? 'bg-blue-600 text-white font-semibold shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -266,14 +338,14 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={() => onSelectSubOption('sales_reports')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                   activeSubOption === 'sales_reports'
                     ? 'bg-blue-600 text-white font-semibold shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 <BarChart3 className="w-3.5 h-3.5" />
-                <span>Sales Reports</span>
+                <span>Sales Analytics & Margins</span>
               </button>
             </>
           )}
@@ -332,5 +404,6 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
     </header>
+    </>
   );
 };

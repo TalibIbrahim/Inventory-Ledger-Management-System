@@ -15,6 +15,9 @@ import {
   Printer,
   RotateCcw,
   Sparkles,
+  CheckCircle2,
+  Clock,
+  Banknote,
 } from 'lucide-react';
 import { SearchableSelect } from '../SearchableSelect';
 import {
@@ -41,6 +44,10 @@ interface SaleVoucherViewProps {
     items: Array<{ productId: string; quantity: number; unitPrice: number }>;
     notes?: string;
     recordedBy: string;
+    paymentStatus?: 'PAID' | 'PAYMENT_DUE' | 'PARTIAL';
+    paidAmount?: number;
+    paymentMethod?: string;
+    dueDate?: string;
   }) => Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }>;
   getProductStockAtWarehouse: (productId: string, warehouseId?: string) => number;
 }
@@ -71,6 +78,15 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   const [validationErrors, setValidationErrors] = useState<VoucherValidationResult | null>(null);
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
+  // Payment Tracking Form State
+  const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'PAYMENT_DUE'>('PAID');
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().slice(0, 10);
+  });
+
   const [lineItems, setLineItems] = useState<FormLineItem[]>([
     {
       productId: products[0]?.id || '',
@@ -82,6 +98,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [filterWarehouse, setFilterWarehouse] = useState('ALL');
+  const [filterPayment, setFilterPayment] = useState<'ALL' | 'PAID' | 'PAYMENT_DUE'>('ALL');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Open modal with draft recovery check
@@ -95,6 +112,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       if (draft.date) setDate(draft.date);
       setNotes(draft.notes || '');
       if (draft.recordedBy) setRecordedBy(draft.recordedBy);
+      if (draft.paymentStatus === 'PAID' || draft.paymentStatus === 'PAYMENT_DUE') {
+        setPaymentStatus(draft.paymentStatus);
+      }
+      if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
+      if (draft.dueDate) setDueDate(draft.dueDate);
       if (draft.lineItems && draft.lineItems.length > 0) {
         setLineItems(draft.lineItems);
       }
@@ -112,6 +134,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     setWarehouseId(warehouses[0]?.id || '');
     setDate(new Date().toISOString().slice(0, 10));
     setNotes('');
+    setPaymentStatus('PAID');
+    setPaymentMethod('CASH');
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    setDueDate(d.toISOString().slice(0, 10));
     setValidationErrors(null);
     setErrorMsg('');
     setLineItems([
@@ -133,8 +160,22 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       notes,
       recordedBy,
       lineItems,
+      paymentStatus,
+      paymentMethod,
+      dueDate,
     });
-  }, [isModalOpen, customerName, warehouseId, date, notes, recordedBy, lineItems]);
+  }, [
+    isModalOpen,
+    customerName,
+    warehouseId,
+    date,
+    notes,
+    recordedBy,
+    lineItems,
+    paymentStatus,
+    paymentMethod,
+    dueDate,
+  ]);
 
   // Keyboard Shortcuts: Ctrl/Cmd+K to focus search, Escape to close modal
   useEffect(() => {
@@ -273,6 +314,9 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       })),
       notes: notes.trim(),
       recordedBy: recordedBy.trim() || 'Billing Officer',
+      paymentStatus,
+      paymentMethod: paymentStatus === 'PAID' ? paymentMethod : 'CREDIT',
+      dueDate: paymentStatus === 'PAYMENT_DUE' ? dueDate : undefined,
     };
 
     const res = await onCreateVoucher(payload);
@@ -288,6 +332,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     setIsModalOpen(false);
     setCustomerName('');
     setNotes('');
+    setPaymentStatus('PAID');
+    setPaymentMethod('CASH');
     if (res.voucher) {
       setSelectedInvoice(res.voucher);
     }
@@ -296,6 +342,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   // Filtered invoices
   const filteredVouchers = vouchers.filter((v) => {
     if (filterWarehouse !== 'ALL' && v.warehouseId !== filterWarehouse) return false;
+    if (filterPayment !== 'ALL') {
+      const status = v.paymentStatus || 'PAID';
+      if (filterPayment === 'PAID' && status !== 'PAID') return false;
+      if (filterPayment === 'PAYMENT_DUE' && status === 'PAID') return false;
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchesNo = v.invoiceNo.toLowerCase().includes(q);
@@ -310,7 +361,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
 
   const totalSalesRevenue = vouchers.reduce((acc, v) => acc + v.totalAmount, 0);
   const totalUnitsDispatched = vouchers.reduce((acc, v) => acc + v.totalQuantity, 0);
-  const isFiltered = searchQuery.trim() !== '' || filterWarehouse !== 'ALL';
+  const isFiltered = searchQuery.trim() !== '' || filterWarehouse !== 'ALL' || filterPayment !== 'ALL';
 
   return (
     <div className="space-y-6">
@@ -402,11 +453,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto flex-wrap">
           <select
             value={filterWarehouse}
             onChange={(e) => setFilterWarehouse(e.target.value)}
-            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 w-full sm:w-auto cursor-pointer"
+            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 cursor-pointer"
           >
             <option value="ALL">All Warehouses</option>
             {warehouses.map((w) => (
@@ -416,11 +467,22 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
             ))}
           </select>
 
+          <select
+            value={filterPayment}
+            onChange={(e) => setFilterPayment(e.target.value as any)}
+            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 cursor-pointer"
+          >
+            <option value="ALL">All Payment Statuses</option>
+            <option value="PAID">Paid (Cash on Hand)</option>
+            <option value="PAYMENT_DUE">Payment Due (Pending)</option>
+          </select>
+
           {isFiltered && (
             <button
               onClick={() => {
                 setSearchQuery('');
                 setFilterWarehouse('ALL');
+                setFilterPayment('ALL');
               }}
               className="px-2.5 py-2 text-xs text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors whitespace-nowrap"
             >
@@ -443,13 +505,14 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                 <th className="py-3 px-4 text-center">Items</th>
                 <th className="py-3 px-4 text-right">Total Qty</th>
                 <th className="py-3 px-4 text-right">Invoice Amount (PKR)</th>
+                <th className="py-3 px-4">Payment Status</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredVouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-14 text-center">
+                  <td colSpan={9} className="py-14 text-center">
                     <div className="max-w-sm mx-auto flex flex-col items-center">
                       <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 mb-3">
                         <Receipt className="w-6 h-6" />
@@ -467,6 +530,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                           onClick={() => {
                             setSearchQuery('');
                             setFilterWarehouse('ALL');
+                            setFilterPayment('ALL');
                           }}
                           className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all"
                         >
@@ -506,6 +570,24 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-semibold text-blue-600">
                       {formatPKR(sv.totalAmount)}
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {sv.paymentStatus === 'PAYMENT_DUE' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                          <Clock className="w-3 h-3 text-amber-500" />
+                          <span>Payment Due</span>
+                        </span>
+                      ) : sv.paymentStatus === 'PARTIAL' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          <Banknote className="w-3 h-3 text-blue-500" />
+                          <span>Partially Paid</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Paid ({sv.paymentMethod === 'BANK_TRANSFER' ? 'Bank' : 'Cash'})</span>
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button
@@ -841,6 +923,167 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                 </div>
               </div>
 
+              {/* Payment Option & Settlement Terms */}
+              <div className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-800">
+                      Payment Terms & Collection Status <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Specify whether payment was received upfront or if delivery is dispatched with payment due.
+                    </p>
+                  </div>
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-200/70 text-slate-600 font-semibold">
+                    Customer Accounting
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('PAID')}
+                    className={`p-3 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                      paymentStatus === 'PAID'
+                        ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50/80 text-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        paymentStatus === 'PAID'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold flex items-center gap-1.5">
+                        <span>Paid (Cash on Hand)</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-medium">
+                          Settled
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Amount received immediately via cash, POS card, or instant bank transfer.
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('PAYMENT_DUE')}
+                    className={`p-3 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                      paymentStatus === 'PAYMENT_DUE'
+                        ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-500/20 text-amber-950 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50/80 text-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        paymentStatus === 'PAYMENT_DUE'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold flex items-center gap-1.5">
+                        <span>Payment Due (Credit Dispatch)</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-medium">
+                          Receivable
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Delivery dispatched immediately. Payment arrives late and is tracked in customer accounts.
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {paymentStatus === 'PAID' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 items-center">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Settlement Mode
+                      </label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      >
+                        <option value="CASH">Cash on Hand (Counter / Driver Collection)</option>
+                        <option value="BANK_TRANSFER">Direct Bank Transfer / IBFT</option>
+                        <option value="CHEQUE">Crossed Bank Cheque</option>
+                        <option value="ONLINE">Card / Online Merchant Portal</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center text-xs text-emerald-800 bg-emerald-100/70 p-2.5 rounded-xl border border-emerald-200">
+                      <span>
+                        Full invoice total of <strong>{formatPKR(formTotalAmount)}</strong> will be credited as settled cash.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 items-center">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-medium text-slate-600">Expected Due Date</label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 7);
+                              setDueDate(d.toISOString().slice(0, 10));
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
+                          >
+                            Net 7
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 15);
+                              setDueDate(d.toISOString().slice(0, 10));
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
+                          >
+                            Net 15
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 30);
+                              setDueDate(d.toISOString().slice(0, 10));
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
+                          >
+                            Net 30
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                      />
+                    </div>
+                    <div className="flex items-center text-xs text-amber-900 bg-amber-100/70 p-2.5 rounded-xl border border-amber-200">
+                      <span>
+                        Outstanding balance of <strong>{formatPKR(formTotalAmount)}</strong> will be tracked under{' '}
+                        <strong>{customerName || 'Customer'}</strong>'s account.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Total & Notes */}
               <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="w-full sm:w-1/2">
@@ -932,6 +1175,39 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                 <div>
                   <div className="text-[11px] text-slate-400 uppercase font-medium">Billing Officer</div>
                   <div className="text-xs font-semibold text-slate-800 mt-0.5">{selectedInvoice.recordedBy}</div>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-200/60">
+                  <div className="text-[11px] text-slate-400 uppercase font-medium">Payment Status</div>
+                  <div className="text-xs font-semibold mt-0.5">
+                    {selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? (
+                      <span className="text-amber-700 font-bold inline-flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" /> Payment Due (Credit Dispatch)
+                        {selectedInvoice.dueDate && ` • Due by ${selectedInvoice.dueDate}`}
+                      </span>
+                    ) : selectedInvoice.paymentStatus === 'PARTIAL' ? (
+                      <span className="text-blue-700 font-bold inline-flex items-center gap-1">
+                        <Banknote className="w-3.5 h-3.5" /> Partially Paid (Due: {formatPKR(selectedInvoice.dueAmount || 0)})
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Settled — Paid on Hand ({selectedInvoice.paymentMethod || 'Cash'})
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] text-slate-400 uppercase font-medium">Amount Received</div>
+                    <div className="text-xs font-mono font-semibold text-emerald-700 mt-0.5">
+                      {formatPKR(selectedInvoice.paidAmount ?? (selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? 0 : selectedInvoice.totalAmount))}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[11px] text-slate-400 uppercase font-medium">Balance Outstanding</div>
+                    <div className="text-xs font-mono font-bold text-amber-700 mt-0.5">
+                      {formatPKR(selectedInvoice.dueAmount ?? (selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? selectedInvoice.totalAmount : 0))}
+                    </div>
+                  </div>
                 </div>
               </div>
 

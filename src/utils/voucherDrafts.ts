@@ -29,6 +29,10 @@ export interface SaleDraftData {
     quantity: string;
     unitPrice: string;
   }>;
+  paymentStatus?: 'PAID' | 'PAYMENT_DUE' | 'PARTIAL';
+  paymentMethod?: string;
+  dueDate?: string;
+  paidAmount?: string;
   savedAt?: number;
 }
 
