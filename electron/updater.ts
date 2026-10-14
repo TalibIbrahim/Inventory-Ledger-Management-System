@@ -1,10 +1,26 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import { createRequire } from 'module';
 import * as https from 'https';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
+
+const nodeRequire = createRequire(import.meta.url);
+
+let autoUpdater: any = null;
+if (process.platform === 'win32') {
+  try {
+    const pkg = nodeRequire('electron-updater');
+    autoUpdater = pkg.autoUpdater || pkg;
+    if (autoUpdater) {
+      autoUpdater.autoDownload = false;
+      autoUpdater.autoInstallOnAppQuit = true;
+    }
+  } catch (err) {
+    console.error('Failed to load electron-updater for Windows:', err);
+  }
+}
 
 const REPO_OWNER = 'TalibIbrahim';
 const REPO_NAME = 'Inventory-Ledger-Management-System';
@@ -14,10 +30,6 @@ let mainWindow: BrowserWindow | null = null;
 let downloadedMacDmgPath: string | null = null;
 let isChecking = false;
 let isDownloading = false;
-
-// Configure electron-updater for Windows
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
 
 /**
  * Compare two semver strings (e.g. "1.0.7" vs "1.0.6")
@@ -42,9 +54,9 @@ export function initAutoUpdater(win: BrowserWindow) {
   mainWindow = win;
 
   // ─── Windows electron-updater event bindings ─────────────────────────
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' && autoUpdater) {
     autoUpdater.on('checking-for-update', () => sendStatus('checking'));
-    autoUpdater.on('update-available', (info) => {
+    autoUpdater.on('update-available', (info: any) => {
       sendStatus('available', { version: info.version, releaseNotes: info.releaseNotes });
       autoUpdater.downloadUpdate();
     });
@@ -93,11 +105,15 @@ async function checkUpdates() {
   sendStatus('checking');
 
   if (process.platform === 'win32') {
-    try {
-      await autoUpdater.checkForUpdates();
-    } catch (err: any) {
-      sendStatus('error', { message: err?.message || 'Update check failed' });
-    } finally {
+    if (autoUpdater) {
+      try {
+        await autoUpdater.checkForUpdates();
+      } catch (err: any) {
+        sendStatus('error', { message: err?.message || 'Update check failed' });
+      } finally {
+        isChecking = false;
+      }
+    } else {
       isChecking = false;
     }
     return;
@@ -178,7 +194,9 @@ async function checkUpdates() {
  */
 function installUpdate() {
   if (process.platform === 'win32') {
-    autoUpdater.quitAndInstall(false, true);
+    if (autoUpdater) {
+      autoUpdater.quitAndInstall(false, true);
+    }
     return;
   }
 
