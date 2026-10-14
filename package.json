@@ -1,7 +1,7 @@
 {
   "name": "inventory-management",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Axiom Stock Ledger",
   "author": "Talib Ibrahim",
   "repository": {
@@ -45,8 +45,7 @@
     },
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "identity": null
     }
