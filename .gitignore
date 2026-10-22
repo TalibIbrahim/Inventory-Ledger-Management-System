@@ -24,3 +24,15 @@ dist-ssr
 *.sw?
 release/
 dist-electron/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local Electron logs
+electron_log*.txt
+
+# AI agent tooling / skills
+.agents/
+.claude/
