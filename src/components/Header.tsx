@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PasswordPromptModal } from './auth/PasswordPromptModal';
+import { CURRENT_APP_VERSION } from './ChangelogModal';
 import {
   Boxes,
   RotateCcw,
@@ -22,9 +23,10 @@ import {
   Users,
   Calendar,
   Download,
+  Trash2,
 } from 'lucide-react';
 
-export type MainSection = 'purchase' | 'sales' | 'inventory' | 'settings';
+export type MainSection = 'purchase' | 'sales' | 'inventory' | 'settings' | 'trash';
 
 export type SubOption =
   // Purchase
@@ -49,6 +51,7 @@ interface HeaderProps {
   onSelectSubOption: (subOption: SubOption) => void;
   onClearData: () => void;
   onOpenChangelog?: () => void;
+  trashCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -58,9 +61,11 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectSubOption,
   onClearData,
   onOpenChangelog,
+  trashCount = 0,
 }) => {
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'synced' | 'error' | 'offline'>('offline');
+  const [syncDetail, setSyncDetail] = useState('Cloud sync is not set up. Add your MongoDB URI in Settings.');
   const [updateStatus, setUpdateStatus] = useState<{
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
     version?: string;
@@ -80,6 +85,13 @@ export const Header: React.FC<HeaderProps> = ({
           setSyncStatus(status);
         });
       }
+      const describe = (info: { status: string; lastSyncedAt: string | null; lastError: string | null; configured: boolean }) => {
+        if (!info.configured) return 'Cloud sync is not set up. Add your MongoDB URI in Settings.';
+        if (info.status === 'error') return `Sync problem: ${info.lastError ?? 'unknown error'}. Your data is safe locally and will sync when the connection is back.`;
+        return info.lastSyncedAt ? `Last synced ${new Date(info.lastSyncedAt).toLocaleString()}` : 'Waiting for first sync…';
+      };
+      window.electronAPI.getSyncInfo?.().then((info) => setSyncDetail(describe(info)));
+      window.electronAPI.onSyncInfo?.((info) => setSyncDetail(describe(info)));
       // Listen for auto-updater events
       if (window.electronAPI.onUpdateStatus) {
         window.electronAPI.onUpdateStatus((data) => {
@@ -161,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
                 
                 {/* Sync Status Badge */}
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                <span title={syncDetail} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border cursor-default ${
                   syncStatus === 'syncing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                   syncStatus === 'synced' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                   syncStatus === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
@@ -179,10 +191,10 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={onOpenChangelog}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs"
-                    title="What's New in v1.0.9 (Auto-Updates & More)"
+                    title={`What's New in v${CURRENT_APP_VERSION}`}
                   >
                     <Sparkles className="w-3 h-3 text-indigo-500" />
-                    <span>v1.0.9 What's New</span>
+                    <span>v{CURRENT_APP_VERSION} What's New</span>
                   </button>
                 )}
               </div>
@@ -252,6 +264,24 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Sliders className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Settings</span>
+            </button>
+
+            <button
+              onClick={() => onSelectSection('trash')}
+              title="Vouchers moved to Trash — restore or delete forever"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                activeSection === 'trash'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 bg-white hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Trash</span>
+              {trashCount > 0 && (
+                <span className={`px-1.5 rounded-full text-[10px] font-bold ${activeSection === 'trash' ? 'bg-white/20' : 'bg-slate-100 text-slate-600'}`}>
+                  {trashCount}
+                </span>
+              )}
             </button>
 
             <button

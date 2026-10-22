@@ -8,6 +8,8 @@ import type {
   OpeningStockVoucher,
   StockAdjustmentVoucher,
   StockLedgerEntry,
+  TrashEntry,
+  TrashKind,
 } from '../types/inventory';
 import { InventoryService } from '../services/inventoryService';
 
@@ -20,6 +22,7 @@ export function useInventoryLedger() {
   const [openingStocks, setOpeningStocks] = useState<OpeningStockVoucher[]>([]);
   const [stockAdjustments, setStockAdjustments] = useState<StockAdjustmentVoucher[]>([]);
   const [ledger, setLedger] = useState<StockLedgerEntry[]>([]);
+  const [trash, setTrash] = useState<TrashEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Refresh all state from localStorage
@@ -32,6 +35,7 @@ export function useInventoryLedger() {
     setOpeningStocks(InventoryService.getOpeningStockVouchers());
     setStockAdjustments(InventoryService.getStockAdjustmentVouchers());
     setLedger(InventoryService.getLedger());
+    setTrash(InventoryService.getTrash());
   }, []);
 
   useEffect(() => {
@@ -42,6 +46,19 @@ export function useInventoryLedger() {
       setLoading(false);
     };
     init();
+  }, [refreshAll]);
+
+  // Cloud sync pulled new/changed records into the local database — reload them.
+  useEffect(() => {
+    if (!window.electronAPI?.onDataChanged) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    window.electronAPI.onDataChanged(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await InventoryService.reload();
+        refreshAll();
+      }, 300);
+    });
   }, [refreshAll]);
 
   // Actions
@@ -258,6 +275,33 @@ export function useInventoryLedger() {
     };
   }, [products, warehouses, purchaseVouchers, saleVouchers, saleReturns, ledger]);
 
+  const trashVoucher = useCallback(
+    async (kind: TrashKind, voucherId: string, reason: string) => {
+      const res = await InventoryService.trashVoucher(kind, voucherId, reason);
+      if (res.success) refreshAll();
+      return res;
+    },
+    [refreshAll]
+  );
+
+  const restoreFromTrash = useCallback(
+    async (trashId: string) => {
+      const res = await InventoryService.restoreFromTrash(trashId);
+      if (res.success) refreshAll();
+      return res;
+    },
+    [refreshAll]
+  );
+
+  const deleteTrashPermanently = useCallback(
+    async (trashId: string) => {
+      const res = await InventoryService.deleteTrashPermanently(trashId);
+      if (res.success) refreshAll();
+      return res;
+    },
+    [refreshAll]
+  );
+
   const getProductStockAtWarehouse = useCallback(
     (productId: string, warehouseId?: string) => {
       return InventoryService.getProductStockAtWarehouse(productId, warehouseId);
@@ -274,6 +318,7 @@ export function useInventoryLedger() {
     openingStocks,
     stockAdjustments,
     ledger,
+    trash,
     loading,
     metrics,
     createProduct,
@@ -289,6 +334,9 @@ export function useInventoryLedger() {
     recordCustomerAccountPayment,
     getProductStockAtWarehouse,
     clearAllData,
+    trashVoucher,
+    restoreFromTrash,
+    deleteTrashPermanently,
     refreshAll,
   };
 }

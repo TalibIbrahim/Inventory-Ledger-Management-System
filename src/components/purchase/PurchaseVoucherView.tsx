@@ -29,6 +29,7 @@ import {
   type PurchaseDraftData,
 } from '../../utils/voucherDrafts';
 
+import { MoveToTrashButton } from '../trash/MoveToTrashButton';
 interface PurchaseVoucherViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -966,6 +967,15 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
                 <strong>Notes:</strong> {selectedVoucher.notes}
               </p>
             )}
+
+            <div className="flex justify-end pt-1">
+              <MoveToTrashButton
+                kind="purchase"
+                voucherId={selectedVoucher.id}
+                voucherNo={selectedVoucher.voucherNo}
+                onDone={() => setSelectedVoucher(null)}
+              />
+            </div>
           </div>
         </div>
       )}

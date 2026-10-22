@@ -223,3 +223,28 @@ export interface StockLedgerEntry {
   notes: string;
   recordedBy: string;
 }
+
+// ─── Trash (soft-deleted vouchers, restorable) ───────────────────────────────
+export type TrashKind = 'purchase' | 'sale' | 'saleReturn' | 'openingStock' | 'stockAdjustment';
+
+export interface TrashedRecords {
+  collection: 'purchaseVouchers' | 'saleVouchers' | 'saleReturns' | 'openingStocks' | 'stockAdjustments' | 'ledger';
+  docs: any[];
+}
+
+export interface TrashEntry {
+  id: string;
+  kind: TrashKind;
+  voucherId: string;
+  voucherNo: string;
+  partyName: string; // Supplier / customer / warehouse shown in the Trash list
+  date: string;
+  totalAmount: number;
+  totalQuantity: number;
+  reason: string;
+  trashedAt: string;
+  // Everything removed together (the voucher, linked returns, ledger entries) — restored as a unit.
+  records: TrashedRecords[];
+  createdAt: string;
+  updatedAt?: string;
+}

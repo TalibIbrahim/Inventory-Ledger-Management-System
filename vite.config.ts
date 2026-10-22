@@ -22,6 +22,17 @@ export default defineConfig({
         onstart(options) {
           options.reload()
         },
+        vite: {
+          build: {
+            // Sandboxed preloads can't be ES modules — emit CommonJS so
+            // window.electronAPI actually gets exposed in packaged builds.
+            lib: {
+              entry: 'electron/preload.ts',
+              formats: ['cjs'],
+              fileName: () => 'preload.cjs',
+            },
+          },
+        },
       },
     ]),
   ],

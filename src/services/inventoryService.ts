@@ -15,6 +15,9 @@ import type {
   PaymentStatus,
   PaymentRecord,
   PaymentMethod,
+  TrashEntry,
+  TrashKind,
+  TrashedRecords,
 } from '../types/inventory';
 import {
   INITIAL_WAREHOUSES,
@@ -36,6 +39,21 @@ const SR_KEY = 'ledger_live_sr_v1';
 const OS_KEY = 'ledger_live_os_v1';
 const SA_KEY = 'ledger_live_sa_v1';
 const LEDGER_KEY = 'ledger_live_ledger_v1';
+const TRASH_KEY = 'ledger_live_trash_v1';
+const LEGACY_MIGRATED_KEY = 'ledger_localstorage_migrated_v1';
+
+type VoucherCollection = 'purchaseVouchers' | 'saleVouchers' | 'saleReturns' | 'openingStocks' | 'stockAdjustments';
+type CacheKey = 'pv' | 'sv' | 'sr' | 'os' | 'sa';
+
+const TRASH_KINDS: Record<TrashKind, { collection: VoucherCollection; cacheKey: CacheKey; storageKey: string; label: string }> = {
+  purchase: { collection: 'purchaseVouchers', cacheKey: 'pv', storageKey: PV_KEY, label: 'Purchase Voucher' },
+  sale: { collection: 'saleVouchers', cacheKey: 'sv', storageKey: SV_KEY, label: 'Sale Invoice' },
+  saleReturn: { collection: 'saleReturns', cacheKey: 'sr', storageKey: SR_KEY, label: 'Sale Return' },
+  openingStock: { collection: 'openingStocks', cacheKey: 'os', storageKey: OS_KEY, label: 'Opening Stock' },
+  stockAdjustment: { collection: 'stockAdjustments', cacheKey: 'sa', storageKey: SA_KEY, label: 'Stock Adjustment' },
+};
+
+const voucherNumberOf = (v: any): string => v?.voucherNo || v?.invoiceNo || v?.returnNo || '';
 
 export class InventoryService {
   // ─── Local In-Memory Cache ────────────────────────────────────────────────
@@ -48,16 +66,31 @@ export class InventoryService {
     os: [] as OpeningStockVoucher[],
     sa: [] as StockAdjustmentVoucher[],
     ledger: [] as StockLedgerEntry[],
+    trash: [] as TrashEntry[],
   };
 
   private static isInitialized = false;
+  private static initPromise: Promise<void> | null = null;
 
   // ─── Initialization (Called once on App mount) ────────────────────────────
-  static async initialize(): Promise<void> {
-    if (this.isInitialized) return;
+  // Single-flight: concurrent callers share one load, so the one-time migration
+  // below can never run twice in parallel.
+  static initialize(): Promise<void> {
+    if (this.isInitialized) return Promise.resolve();
+    if (!this.initPromise) {
+      this.initPromise = this.load().finally(() => {
+        this.initPromise = null;
+      });
+    }
+    return this.initPromise;
+  }
+
+  private static async load(): Promise<void> {
     
     if (window.electronAPI) {
       try {
+        await this.migrateLegacyLocalStorage();
+
         this.cache.products = await window.electronAPI.db.find('products');
         this.cache.warehouses = await window.electronAPI.db.find('warehouses');
 
@@ -77,6 +110,8 @@ export class InventoryService {
         this.cache.os = await window.electronAPI.db.find('openingStocks');
         this.cache.sa = await window.electronAPI.db.find('stockAdjustments');
         this.cache.ledger = await window.electronAPI.db.find('ledger');
+        this.cache.trash = await window.electronAPI.db.find('trash');
+        this.cache.trash.sort((a, b) => b.trashedAt.localeCompare(a.trashedAt));
         
         // Sort ledger by timestamp descending
         this.cache.ledger.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -86,31 +121,34 @@ export class InventoryService {
     } else {
       // Fallback to localStorage for browser dev mode
       const rawProducts = localStorage.getItem(PRODUCTS_KEY);
-      this.cache.products = rawProducts !== null ? JSON.parse(rawProducts) : INITIAL_PRODUCTS;
+      this.cache.products = rawProducts !== null ? JSON.parse(rawProducts) : import.meta.env.DEV ? INITIAL_PRODUCTS : [];
 
       const rawWarehouses = localStorage.getItem(WAREHOUSES_KEY);
-      this.cache.warehouses = rawWarehouses !== null ? JSON.parse(rawWarehouses) : INITIAL_WAREHOUSES;
+      this.cache.warehouses = rawWarehouses !== null ? JSON.parse(rawWarehouses) : import.meta.env.DEV ? INITIAL_WAREHOUSES : [];
 
       const rawPv = localStorage.getItem(PV_KEY);
-      this.cache.pv = rawPv !== null ? JSON.parse(rawPv) : INITIAL_PURCHASE_VOUCHERS;
+      this.cache.pv = rawPv !== null ? JSON.parse(rawPv) : import.meta.env.DEV ? INITIAL_PURCHASE_VOUCHERS : [];
 
       const rawSv = localStorage.getItem(SV_KEY);
-      this.cache.sv = rawSv !== null ? JSON.parse(rawSv) : INITIAL_SALE_VOUCHERS;
+      this.cache.sv = rawSv !== null ? JSON.parse(rawSv) : import.meta.env.DEV ? INITIAL_SALE_VOUCHERS : [];
 
       const rawSr = localStorage.getItem(SR_KEY);
-      this.cache.sr = rawSr !== null ? JSON.parse(rawSr) : INITIAL_SALE_RETURNS;
+      this.cache.sr = rawSr !== null ? JSON.parse(rawSr) : import.meta.env.DEV ? INITIAL_SALE_RETURNS : [];
 
       const rawOs = localStorage.getItem(OS_KEY);
-      this.cache.os = rawOs !== null ? JSON.parse(rawOs) : INITIAL_OPENING_STOCK;
+      this.cache.os = rawOs !== null ? JSON.parse(rawOs) : import.meta.env.DEV ? INITIAL_OPENING_STOCK : [];
 
       const rawSa = localStorage.getItem(SA_KEY);
-      this.cache.sa = rawSa !== null ? JSON.parse(rawSa) : INITIAL_STOCK_ADJUSTMENTS;
+      this.cache.sa = rawSa !== null ? JSON.parse(rawSa) : import.meta.env.DEV ? INITIAL_STOCK_ADJUSTMENTS : [];
+
+      const rawTrash = localStorage.getItem(TRASH_KEY);
+      this.cache.trash = rawTrash !== null ? JSON.parse(rawTrash) : [];
 
       const rawLedger = localStorage.getItem(LEDGER_KEY);
-      this.cache.ledger = rawLedger !== null ? JSON.parse(rawLedger) : INITIAL_LEDGER;
+      this.cache.ledger = rawLedger !== null ? JSON.parse(rawLedger) : import.meta.env.DEV ? INITIAL_LEDGER : [];
 
       // In browser dev mode, if no sale vouchers or products exist, pre-populate initial datasets
-      if (this.cache.sv.length === 0 && (!rawSv || rawSv === '[]')) {
+      if (import.meta.env.DEV && this.cache.sv.length === 0 && (!rawSv || rawSv === '[]')) {
         this.cache.sv = [...INITIAL_SALE_VOUCHERS];
         this.cache.products = [...INITIAL_PRODUCTS];
         this.cache.warehouses = [...INITIAL_WAREHOUSES];
@@ -123,6 +161,125 @@ export class InventoryService {
     }
     
     this.isInitialized = true;
+  }
+
+  // ─── Legacy localStorage → NeDB migration ─────────────────────────────────
+  // Builds up to v1.0.9 shipped an ES-module preload that Electron refused to
+  // load, so the app silently ran in browser-fallback mode: it seeded the demo
+  // dataset and saved everything to localStorage. Move the user's real records
+  // into the database once, leaving the demo records behind.
+  private static async migrateLegacyLocalStorage(): Promise<void> {
+    if (!window.electronAPI || localStorage.getItem(LEGACY_MIGRATED_KEY)) return;
+    const db = window.electronAPI.db;
+
+    const read = <T>(key: string): T[] => {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) as T[]) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const legacy = {
+      products: read<Product>(PRODUCTS_KEY),
+      warehouses: read<Warehouse>(WAREHOUSES_KEY),
+      purchaseVouchers: read<PurchaseVoucher>(PV_KEY),
+      saleVouchers: read<SaleVoucher>(SV_KEY),
+      saleReturns: read<SaleReturnVoucher>(SR_KEY),
+      openingStocks: read<OpeningStockVoucher>(OS_KEY),
+      stockAdjustments: read<StockAdjustmentVoucher>(SA_KEY),
+      ledger: read<StockLedgerEntry>(LEDGER_KEY),
+    };
+
+    const ids = (list: { id: string }[]) => new Set(list.map((x) => x.id));
+    const demoVoucherIds = new Set([
+      ...ids(INITIAL_PURCHASE_VOUCHERS),
+      ...ids(INITIAL_SALE_VOUCHERS),
+      ...ids(INITIAL_SALE_RETURNS),
+      ...ids(INITIAL_OPENING_STOCK),
+      ...ids(INITIAL_STOCK_ADJUSTMENTS),
+    ]);
+    const notDemo = <T extends { id: string }>(list: T[]) => list.filter((x) => !demoVoucherIds.has(x.id));
+
+    const purchaseVouchers = notDemo(legacy.purchaseVouchers);
+    const saleVouchers = notDemo(legacy.saleVouchers);
+    const saleReturns = notDemo(legacy.saleReturns);
+    const openingStocks = notDemo(legacy.openingStocks);
+    const stockAdjustments = notDemo(legacy.stockAdjustments);
+    const ledger = legacy.ledger.filter((e) => !demoVoucherIds.has(e.voucherId));
+
+    // Keep demo products/warehouses only if the user's own records use them.
+    const usedProducts = new Set<string>();
+    const usedWarehouses = new Set<string>();
+    for (const v of [...purchaseVouchers, ...saleVouchers, ...saleReturns, ...openingStocks, ...stockAdjustments]) {
+      usedWarehouses.add(v.warehouseId);
+      for (const line of v.items) usedProducts.add(line.productId);
+    }
+    for (const e of ledger) {
+      usedProducts.add(e.productId);
+      usedWarehouses.add(e.warehouseId);
+    }
+    const demoProductIds = ids(INITIAL_PRODUCTS);
+    const demoWarehouseIds = ids(INITIAL_WAREHOUSES);
+    const products = legacy.products.filter((p) => !demoProductIds.has(p.id) || usedProducts.has(p.id));
+    const warehouses = legacy.warehouses.filter((w) => !demoWarehouseIds.has(w.id) || usedWarehouses.has(w.id));
+
+    const toInsert: [string, { id: string }[]][] = [
+      ['products', products],
+      ['warehouses', warehouses],
+      ['purchaseVouchers', purchaseVouchers],
+      ['saleVouchers', saleVouchers],
+      ['saleReturns', saleReturns],
+      ['openingStocks', openingStocks],
+      ['stockAdjustments', stockAdjustments],
+      ['ledger', ledger],
+    ];
+    // Merge: only add records the database doesn't already have.
+    for (const [collection, docs] of toInsert) {
+      const existing = new Set((await db.find(collection)).map((d: { id: string }) => d.id));
+      for (const doc of docs) {
+        if (existing.has(doc.id)) continue;
+        await db.insert(collection, doc);
+        existing.add(doc.id);
+      }
+    }
+
+    // The legacy keys are left in place as a backup; the flag stops a re-import.
+    localStorage.setItem(LEGACY_MIGRATED_KEY, new Date().toISOString());
+  }
+
+  /** Re-read everything from the database (e.g. after cloud sync pulled changes). */
+  static async reload(): Promise<void> {
+    if (this.initPromise) await this.initPromise;
+    this.isInitialized = false;
+    await this.initialize();
+  }
+
+  // ─── Numbering ──────────────────────────────────────────────────────────────
+  // Numbers continue from the highest one ever issued (including vouchers in the
+  // Trash), so trashing or restoring can never produce duplicate numbers.
+  private static trashedDocs(collection: TrashedRecords['collection']): any[] {
+    return this.cache.trash.flatMap((t) => t.records.filter((r) => r.collection === collection).flatMap((r) => r.docs));
+  }
+
+  private static nextNumber(prefix: string, collection: VoucherCollection, live: any[]): string {
+    const pattern = new RegExp(`^${prefix}-\\d{4}-(\\d+)$`);
+    let max = 0;
+    for (const v of [...live, ...this.trashedDocs(collection)]) {
+      const m = pattern.exec(voucherNumberOf(v));
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    return `${prefix}-${new Date().getFullYear()}-${String(max + 1).padStart(4, '0')}`;
+  }
+
+  private static nextTxnId(offset = 0): string {
+    let max = 0;
+    for (const e of [...this.cache.ledger, ...this.trashedDocs('ledger')]) {
+      const m = /^TXN-\d{4}-(\d+)$/.exec(e.id);
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    return `TXN-${new Date().getFullYear()}-${String(max + 1 + offset).padStart(4, '0')}`;
   }
 
   // ─── Products Master ────────────────────────────────────────────────────────
@@ -187,8 +344,7 @@ export class InventoryService {
         const osList = this.getOpeningStockVouchers();
         const ledger = this.getLedger();
 
-        const voucherSeq = osList.length + 1;
-        const voucherNo = `OS-${new Date().getFullYear()}-${String(voucherSeq).padStart(4, '0')}`;
+        const voucherNo = this.nextNumber('OS', 'openingStocks', osList);
         const voucherId = `os-${Date.now().toString(36)}`;
         const totalVal = initQty * purchaseCost;
 
@@ -218,9 +374,8 @@ export class InventoryService {
           createdAt: new Date().toISOString(),
         };
 
-        const txnSeq = ledger.length + 1;
         const ledgerEntry: StockLedgerEntry = {
-          id: `TXN-${new Date().getFullYear()}-${String(txnSeq).padStart(4, '0')}`,
+          id: this.nextTxnId(),
           timestamp: new Date().toISOString(),
           voucherType: 'OPENING_STOCK',
           voucherId,
@@ -296,6 +451,13 @@ export class InventoryService {
       return {
         success: false,
         error: 'Cannot delete product with existing audit ledger transactions. It has recorded stock history.',
+      };
+    }
+
+    if (this.trashedDocs('ledger').some((l) => l.productId === id)) {
+      return {
+        success: false,
+        error: 'This product is used by a voucher in the Trash. Delete that voucher permanently first.',
       };
     }
 
@@ -414,8 +576,7 @@ export class InventoryService {
     const pvList = this.getPurchaseVouchers();
     const ledger = this.getLedger();
 
-    const voucherSeq = pvList.length + 1;
-    const voucherNo = `PV-${new Date().getFullYear()}-${String(voucherSeq).padStart(4, '0')}`;
+    const voucherNo = this.nextNumber('PV', 'purchaseVouchers', pvList);
     const voucherId = `pv-${Date.now().toString(36)}`;
 
     let totalQuantity = 0;
@@ -457,9 +618,8 @@ export class InventoryService {
 
       // Create Stock Ledger Entry (Inflow Debit)
       const currentWhStock = this.getProductStockAtWarehouse(prod.id, targetWh.id);
-      const txnSeq = ledger.length + newLedgerEntries.length + 1;
       const ledgerEntry: StockLedgerEntry = {
-        id: `TXN-${new Date().getFullYear()}-${String(txnSeq).padStart(4, '0')}`,
+        id: this.nextTxnId(newLedgerEntries.length),
         timestamp: input.date ? new Date(input.date).toISOString() : new Date().toISOString(),
         voucherType: 'PURCHASE',
         voucherId,
@@ -566,8 +726,7 @@ export class InventoryService {
     const svList = this.getSaleVouchers();
     const ledger = this.getLedger();
 
-    const voucherSeq = svList.length + 1;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${String(voucherSeq).padStart(4, '0')}`;
+    const invoiceNo = this.nextNumber('INV', 'saleVouchers', svList);
     const voucherId = `sv-${Date.now().toString(36)}`;
 
     let totalQuantity = 0;
@@ -606,9 +765,8 @@ export class InventoryService {
       updatedProducts.push(prod);
 
       const currentWhStock = this.getProductStockAtWarehouse(prod.id, targetWh.id);
-      const txnSeq = ledger.length + newLedgerEntries.length + 1;
       const ledgerEntry: StockLedgerEntry = {
-        id: `TXN-${new Date().getFullYear()}-${String(txnSeq).padStart(4, '0')}`,
+        id: this.nextTxnId(newLedgerEntries.length),
         timestamp: input.date ? new Date(input.date).toISOString() : new Date().toISOString(),
         voucherType: 'SALE',
         voucherId,
@@ -854,8 +1012,7 @@ export class InventoryService {
     const srList = this.getSaleReturns();
     const ledger = this.getLedger();
 
-    const voucherSeq = srList.length + 1;
-    const returnNo = `SR-${new Date().getFullYear()}-${String(voucherSeq).padStart(4, '0')}`;
+    const returnNo = this.nextNumber('SR', 'saleReturns', srList);
     const voucherId = `sr-${Date.now().toString(36)}`;
 
     let totalQuantity = 0;
@@ -894,9 +1051,8 @@ export class InventoryService {
       updatedProducts.push(prod);
 
       const currentWhStock = this.getProductStockAtWarehouse(prod.id, targetWh.id);
-      const txnSeq = ledger.length + newLedgerEntries.length + 1;
       const ledgerEntry: StockLedgerEntry = {
-        id: `TXN-${new Date().getFullYear()}-${String(txnSeq).padStart(4, '0')}`,
+        id: this.nextTxnId(newLedgerEntries.length),
         timestamp: input.date ? new Date(input.date).toISOString() : new Date().toISOString(),
         voucherType: 'SALE_RETURN',
         voucherId,
@@ -985,8 +1141,7 @@ export class InventoryService {
     const osList = this.getOpeningStockVouchers();
     const ledger = this.getLedger();
 
-    const voucherSeq = osList.length + 1;
-    const voucherNo = `OS-${new Date().getFullYear()}-${String(voucherSeq).padStart(4, '0')}`;
+    const voucherNo = this.nextNumber('OS', 'openingStocks', osList);
     const voucherId = `os-${Date.now().toString(36)}`;
 
     let totalQuantity = 0;
@@ -1025,9 +1180,8 @@ export class InventoryService {
       updatedProducts.push(prod);
 
       const currentWhStock = this.getProductStockAtWarehouse(prod.id, targetWh.id);
-      const txnSeq = ledger.length + newLedgerEntries.length + 1;
       const ledgerEntry: StockLedgerEntry = {
-        id: `TXN-${new Date().getFullYear()}-${String(txnSeq).padStart(4, '0')}`,
+        id: this.nextTxnId(newLedgerEntries.length),
         timestamp: input.date ? new Date(input.date).toISOString() : new Date().toISOString(),
         voucherType: 'OPENING_STOCK',
         voucherId,
@@ -1112,8 +1266,7 @@ export class InventoryService {
     const saList = this.getStockAdjustmentVouchers();
     const ledger = this.getLedger();
 
-    const voucherSeq = saList.length + 1;
-    const voucherNo = `SA-${new Date().getFullYear()}-${String(voucherSeq).padStart(4, '0')}`;
+    const voucherNo = this.nextNumber('SA', 'stockAdjustments', saList);
     const voucherId = `sa-${Date.now().toString(36)}`;
 
     let totalQuantityChanged = 0;
@@ -1160,9 +1313,8 @@ export class InventoryService {
       prod.updatedAt = new Date().toISOString();
       updatedProducts.push(prod);
 
-      const txnSeq = ledger.length + newLedgerEntries.length + 1;
       const ledgerEntry: StockLedgerEntry = {
-        id: `TXN-${new Date().getFullYear()}-${String(txnSeq).padStart(4, '0')}`,
+        id: this.nextTxnId(newLedgerEntries.length),
         timestamp: input.date ? new Date(input.date).toISOString() : new Date().toISOString(),
         voucherType: 'STOCK_ADJUSTMENT',
         voucherId,
@@ -1205,11 +1357,246 @@ export class InventoryService {
       createdAt: new Date().toISOString(),
     };
 
-    this.saveStockAdjustmentVouchers([newVoucher, ...saList]);
-    this.saveLedger([...newLedgerEntries, ...ledger]);
-    this.saveProducts(products);
+    await this.saveStockAdjustmentVouchers([newVoucher, ...saList]);
+    await this.saveLedger([...newLedgerEntries, ...ledger]);
+    await this.saveProducts(products);
+
+    if (window.electronAPI) {
+      await window.electronAPI.db.insert('stockAdjustments', newVoucher);
+      for (const e of newLedgerEntries) await window.electronAPI.db.insert('ledger', e);
+      for (const p of updatedProducts) await window.electronAPI.db.update('products', { id: p.id }, p);
+    }
 
     return { success: true, voucher: newVoucher };
+  }
+
+  // ─── Trash (move to trash / restore / delete forever) ──────────────────────
+  // Trashing a voucher removes it together with its stock ledger entries (and, for a
+  // sale, any sale returns raised against it). Everything is kept in one Trash entry so
+  // Restore puts it all back exactly as it was. Stock totals are rebuilt from the ledger.
+  static getTrash(): TrashEntry[] {
+    return [...this.cache.trash];
+  }
+
+  private static async saveTrash(trash: TrashEntry[]): Promise<void> {
+    this.cache.trash = trash;
+    if (!window.electronAPI) {
+      localStorage.setItem(TRASH_KEY, JSON.stringify(trash));
+    }
+  }
+
+  private static async setVoucherList(kind: TrashKind, list: any[]): Promise<void> {
+    const cfg = TRASH_KINDS[kind];
+    (this.cache[cfg.cacheKey] as any[]) = list;
+    if (!window.electronAPI) {
+      localStorage.setItem(cfg.storageKey, JSON.stringify(list));
+    }
+  }
+
+  private static kindForCollection(collection: string): TrashKind | null {
+    const found = (Object.keys(TRASH_KINDS) as TrashKind[]).find((k) => TRASH_KINDS[k].collection === collection);
+    return found ?? null;
+  }
+
+  /**
+   * Compare warehouse stock before/after a change, only for the product+warehouse pairs
+   * touched by `changed`. Returns a message if any of them would be pushed below zero.
+   */
+  private static stockProblem(
+    before: StockLedgerEntry[],
+    after: StockLedgerEntry[],
+    changed: StockLedgerEntry[]
+  ): string | null {
+    const keyOf = (e: StockLedgerEntry) => `${e.productId}|${e.warehouseId}`;
+    const keys = new Set(changed.map(keyOf));
+    const totals = (list: StockLedgerEntry[]) => {
+      const m = new Map<string, number>();
+      for (const e of list) {
+        const k = keyOf(e);
+        if (keys.has(k)) m.set(k, (m.get(k) ?? 0) + (Number(e.changeQty) || 0));
+      }
+      return m;
+    };
+    const b = totals(before);
+    const a = totals(after);
+    for (const k of keys) {
+      const nowQty = b.get(k) ?? 0;
+      const nextQty = a.get(k) ?? 0;
+      if (nextQty < 0 && nextQty < nowQty) {
+        const sample = changed.find((e) => keyOf(e) === k)!;
+        return `"${sample.productName}" at ${sample.warehouseName} would go to ${nextQty} ${sample.uom} (currently ${nowQty})`;
+      }
+    }
+    return null;
+  }
+
+  /** Recompute running balances and product totals from the ledger for the given products. */
+  private static async rebuildStock(productIds: Set<string>): Promise<void> {
+    const ledger = this.cache.ledger;
+    const changedEntries: StockLedgerEntry[] = [];
+    const changedProducts: Product[] = [];
+
+    for (const productId of productIds) {
+      const entries = ledger
+        .filter((e) => e.productId === productId)
+        .sort((x, y) => x.timestamp.localeCompare(y.timestamp) || x.id.localeCompare(y.id));
+      let total = 0;
+      const perWarehouse = new Map<string, number>();
+      for (const e of entries) {
+        total += Number(e.changeQty) || 0;
+        const wh = (perWarehouse.get(e.warehouseId) ?? 0) + (Number(e.changeQty) || 0);
+        perWarehouse.set(e.warehouseId, wh);
+        if (e.runningBalance !== total || e.locationRunningBalance !== wh) {
+          e.runningBalance = total;
+          e.locationRunningBalance = wh;
+          changedEntries.push(e);
+        }
+      }
+      const product = this.cache.products.find((p) => p.id === productId);
+      if (product && product.currentStock !== total) {
+        product.currentStock = total;
+        product.updatedAt = new Date().toISOString();
+        changedProducts.push(product);
+      }
+    }
+
+    await this.saveLedger([...ledger]);
+    await this.saveProducts([...this.cache.products]);
+    if (window.electronAPI) {
+      for (const e of changedEntries) await window.electronAPI.db.update('ledger', { id: e.id }, e);
+      for (const p of changedProducts) await window.electronAPI.db.update('products', { id: p.id }, p);
+    }
+  }
+
+  static async trashVoucher(
+    kind: TrashKind,
+    voucherId: string,
+    reason: string
+  ): Promise<{ success: boolean; entry?: TrashEntry; linkedReturns?: number; error?: string }> {
+    const cfg = TRASH_KINDS[kind];
+    const list = this.cache[cfg.cacheKey] as any[];
+    const voucher = list.find((v) => v.id === voucherId);
+    if (!voucher) return { success: false, error: `${cfg.label} not found.` };
+
+    const groups: { kind: TrashKind; vouchers: any[] }[] = [{ kind, vouchers: [voucher] }];
+    if (kind === 'sale') {
+      const invoiceNo = String(voucher.invoiceNo || '').trim().toLowerCase();
+      const linked = this.cache.sr.filter((r) => (r.originalInvoiceNo || '').trim().toLowerCase() === invoiceNo);
+      if (invoiceNo && linked.length) groups.push({ kind: 'saleReturn', vouchers: linked });
+    }
+
+    const voucherIds = new Set(groups.flatMap((g) => g.vouchers.map((v) => v.id)));
+    const ledgerDocs = this.cache.ledger.filter((e) => voucherIds.has(e.voucherId));
+    const remaining = this.cache.ledger.filter((e) => !voucherIds.has(e.voucherId));
+
+    const problem = this.stockProblem(this.cache.ledger, remaining, ledgerDocs);
+    if (problem) {
+      return {
+        success: false,
+        error: `Can't move ${voucherNumberOf(voucher)} to Trash: ${problem}. Some of this stock has already been sold or adjusted — trash those vouchers first.`,
+      };
+    }
+
+    const strip = (d: any) => {
+      const { _id, ...rest } = d;
+      return rest;
+    };
+    const now = new Date().toISOString();
+    const entry: TrashEntry = {
+      id: `trash-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      kind,
+      voucherId,
+      voucherNo: voucherNumberOf(voucher),
+      partyName: voucher.supplierName || voucher.customerName || voucher.warehouseName || '',
+      date: voucher.date,
+      totalAmount: Number(voucher.totalAmount) || 0,
+      totalQuantity: Number(voucher.totalQuantity ?? voucher.netQuantityDelta) || 0,
+      reason: reason.trim(),
+      trashedAt: now,
+      createdAt: now,
+      records: [
+        ...groups.map((g) => ({ collection: TRASH_KINDS[g.kind].collection, docs: g.vouchers.map(strip) })),
+        { collection: 'ledger' as const, docs: ledgerDocs.map(strip) },
+      ],
+    };
+
+    // Write the Trash entry first, so the data is never only in memory.
+    if (window.electronAPI) await window.electronAPI.db.insert('trash', entry);
+    await this.saveTrash([entry, ...this.cache.trash]);
+
+    for (const g of groups) {
+      const ids = new Set(g.vouchers.map((v) => v.id));
+      const gcfg = TRASH_KINDS[g.kind];
+      await this.setVoucherList(g.kind, (this.cache[gcfg.cacheKey] as any[]).filter((v) => !ids.has(v.id)));
+      if (window.electronAPI) {
+        for (const id of ids) await window.electronAPI.db.remove(gcfg.collection, { id });
+      }
+    }
+
+    await this.saveLedger(remaining);
+    if (window.electronAPI) {
+      for (const e of ledgerDocs) await window.electronAPI.db.remove('ledger', { id: e.id });
+    }
+
+    await this.rebuildStock(new Set(ledgerDocs.map((e) => e.productId)));
+    return { success: true, entry, linkedReturns: groups.length > 1 ? groups[1].vouchers.length : 0 };
+  }
+
+  static async restoreFromTrash(trashId: string): Promise<{ success: boolean; entry?: TrashEntry; error?: string }> {
+    const entry = this.cache.trash.find((t) => t.id === trashId);
+    if (!entry) return { success: false, error: 'Item not found in Trash.' };
+
+    const ledgerDocs: StockLedgerEntry[] = entry.records
+      .filter((r) => r.collection === 'ledger')
+      .flatMap((r) => r.docs);
+
+    const missingProducts = [...new Set(ledgerDocs.map((e) => e.productId))].filter(
+      (pid) => !this.cache.products.some((p) => p.id === pid)
+    );
+    if (missingProducts.length) {
+      return { success: false, error: `Can't restore ${entry.voucherNo}: one or more of its products no longer exist.` };
+    }
+
+    const existingLedgerIds = new Set(this.cache.ledger.map((e) => e.id));
+    const ledgerToAdd = ledgerDocs.filter((e) => !existingLedgerIds.has(e.id));
+    const problem = this.stockProblem(this.cache.ledger, [...this.cache.ledger, ...ledgerToAdd], ledgerToAdd);
+    if (problem) {
+      return { success: false, error: `Can't restore ${entry.voucherNo}: ${problem}. There isn't enough stock left.` };
+    }
+
+    // Put everything back first, then remove the Trash entry (no window where data is missing).
+    for (const record of entry.records) {
+      if (record.collection === 'ledger') continue;
+      const kind = this.kindForCollection(record.collection);
+      if (!kind) continue;
+      const cfg = TRASH_KINDS[kind];
+      const current = this.cache[cfg.cacheKey] as any[];
+      const have = new Set(current.map((v) => v.id));
+      const toAdd = record.docs.filter((d) => !have.has(d.id));
+      await this.setVoucherList(kind, [...toAdd, ...current]);
+      if (window.electronAPI) {
+        for (const d of toAdd) await window.electronAPI.db.insert(cfg.collection, d);
+      }
+    }
+
+    await this.saveLedger([...ledgerToAdd, ...this.cache.ledger]);
+    if (window.electronAPI) {
+      for (const e of ledgerToAdd) await window.electronAPI.db.insert('ledger', e);
+    }
+
+    if (window.electronAPI) await window.electronAPI.db.remove('trash', { id: trashId });
+    await this.saveTrash(this.cache.trash.filter((t) => t.id !== trashId));
+
+    await this.rebuildStock(new Set(ledgerDocs.map((e) => e.productId)));
+    return { success: true, entry };
+  }
+
+  static async deleteTrashPermanently(trashId: string): Promise<{ success: boolean; error?: string }> {
+    const entry = this.cache.trash.find((t) => t.id === trashId);
+    if (!entry) return { success: false, error: 'Item not found in Trash.' };
+    if (window.electronAPI) await window.electronAPI.db.remove('trash', { id: trashId });
+    await this.saveTrash(this.cache.trash.filter((t) => t.id !== trashId));
+    return { success: true };
   }
 
   // ─── CSV Export Utility ─────────────────────────────────────────────────────
@@ -1263,6 +1650,7 @@ export class InventoryService {
         OS_KEY,
         SA_KEY,
         LEDGER_KEY,
+        TRASH_KEY,
       ];
       keysToRemove.forEach((k) => localStorage.removeItem(k));
     }
@@ -1275,6 +1663,7 @@ export class InventoryService {
     this.cache.os = [];
     this.cache.sa = [];
     this.cache.ledger = [];
+    this.cache.trash = [];
 
     await this.saveWarehouses(DEFAULT_WAREHOUSES);
   }

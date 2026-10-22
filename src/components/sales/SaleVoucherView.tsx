@@ -33,6 +33,7 @@ import {
   type SaleDraftData,
 } from '../../utils/voucherDrafts';
 
+import { MoveToTrashButton } from '../trash/MoveToTrashButton';
 interface SaleVoucherViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -1277,7 +1278,14 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-100 flex justify-end">
+            <div className="p-4 border-t border-slate-100 flex justify-between gap-2">
+              <MoveToTrashButton
+                kind="sale"
+                voucherId={selectedInvoice.id}
+                voucherNo={selectedInvoice.invoiceNo}
+                note="Payments recorded on this invoice, and any sale returns raised against it, are moved to Trash with it."
+                onDone={() => setSelectedInvoice(null)}
+              />
               <button
                 onClick={() => setSelectedInvoice(null)}
                 className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"

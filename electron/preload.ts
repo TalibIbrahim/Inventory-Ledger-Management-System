@@ -14,6 +14,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   restartApp: () => ipcRenderer.invoke('restart-app'),
   getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
+  getSyncInfo: () => ipcRenderer.invoke('get-sync-info'),
+  onSyncInfo: (callback: (info: any) => void) => {
+    ipcRenderer.on('sync-info', (_event, info) => callback(info));
+  },
+  syncNow: () => ipcRenderer.invoke('sync-now'),
+  testMongoUri: (uri: string) => ipcRenderer.invoke('test-mongo-uri', uri),
+  onDataChanged: (callback: () => void) => {
+    ipcRenderer.on('data-changed', () => callback());
+  },
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  // Backups
+  backupNow: () => ipcRenderer.invoke('backup-now'),
+  listBackups: () => ipcRenderer.invoke('list-backups'),
+  openBackupsFolder: () => ipcRenderer.invoke('open-backups-folder'),
+  restoreBackup: () => ipcRenderer.invoke('restore-backup'),
   onSyncStatus: (callback: (status: 'syncing' | 'synced' | 'error' | 'offline') => void) => {
     ipcRenderer.on('sync-status', (_event, status) => callback(status));
   },

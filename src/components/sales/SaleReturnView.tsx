@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { SearchableSelect } from '../SearchableSelect';
 
+import { MoveToTrashButton } from '../trash/MoveToTrashButton';
 interface SaleReturnViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -758,7 +759,13 @@ export const SaleReturnView: React.FC<SaleReturnViewProps> = ({
               )}
             </div>
 
-            <div className="p-4 border-t border-slate-100 flex justify-end">
+            <div className="p-4 border-t border-slate-100 flex justify-between gap-2">
+              <MoveToTrashButton
+                kind="saleReturn"
+                voucherId={selectedReturn.id}
+                voucherNo={selectedReturn.returnNo}
+                onDone={() => setSelectedReturn(null)}
+              />
               <button
                 onClick={() => setSelectedReturn(null)}
                 className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"

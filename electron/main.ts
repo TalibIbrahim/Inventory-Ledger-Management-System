@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -16,7 +16,7 @@ function createWindow() {
     title: 'Axiom Stock Ledger',
     backgroundColor: '#f8fafc',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -34,30 +34,32 @@ function createWindow() {
   });
 }
 
-import { startAutoSync, setMongoUri, getSyncStatus } from './sync';
+import { startAutoSync, setMongoUri, getSyncStatus, getSyncInfo, runSyncCycle, notifyLocalChange, flushSync, testConnection } from './sync';
 import { getConfig, saveConfig } from './config';
-import { initDb } from './db';
+import { initDb, isDataCollection, findDocs, insertDoc, updateDocs, removeDocs, recordTombstones, clean, DATA_COLLECTIONS } from './db';
 import { initAutoUpdater } from './updater';
+import { createBackup, getBackupDir, listBackups, restoreBackup, startAutoBackups } from './backup';
 
 app.whenReady().then(() => {
   const config = getConfig();
-  
+
   // Initialize Datastores with configured path
   initDb(config.dbPath);
-  
+
   // Set MongoDB URI if configured
-  if (config.mongoUri) {
-    setMongoUri(config.mongoUri);
-  }
+  setMongoUri(config.mongoUri || '');
 
   createWindow();
-  
+
   // Initialize auto-updater (production only — skip in dev mode)
   if (!isDev && mainWindow) {
     initAutoUpdater(mainWindow);
   }
-  
-  // Start cloud sync to MongoDB every 60 seconds
+
+  // Local safety snapshots (startup + every few hours)
+  startAutoBackups();
+
+  // Cloud sync: full cycle every 60 seconds, plus a push a few seconds after each local change
   startAutoSync(60000);
 });
 
@@ -73,12 +75,35 @@ app.on('activate', () => {
   }
 });
 
+// Push any pending changes to the cloud before quitting (bounded, so quit never hangs).
+let quitFlushed = false;
+app.on('before-quit', (event) => {
+  if (quitFlushed) return;
+  event.preventDefault();
+  quitFlushed = true;
+  flushSync(6000).finally(() => app.quit());
+});
+
 // Settings & Config IPC Handlers
 ipcMain.handle('get-config', () => getConfig());
 ipcMain.handle('get-sync-status', () => getSyncStatus());
+ipcMain.handle('get-sync-info', () => getSyncInfo());
+ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('save-config', (event, newConfig) => {
-  return saveConfig(newConfig);
+  const saved = saveConfig(newConfig);
+  if (typeof newConfig?.mongoUri === 'string') {
+    setMongoUri(saved.mongoUri);
+    runSyncCycle();
+  }
+  return saved;
+});
+
+ipcMain.handle('test-mongo-uri', (event, uri: string) => testConnection(uri));
+
+ipcMain.handle('sync-now', async () => {
+  await runSyncCycle();
+  return getSyncInfo();
 });
 
 ipcMain.handle('select-directory', async () => {
@@ -93,6 +118,34 @@ ipcMain.handle('select-directory', async () => {
 ipcMain.handle('restart-app', () => {
   app.relaunch();
   app.quit();
+});
+
+// ─── Backups ────────────────────────────────────────────────────────────────
+ipcMain.handle('backup-now', async () => {
+  const file = await createBackup('manual');
+  return { success: true, file };
+});
+
+ipcMain.handle('list-backups', () => listBackups());
+
+ipcMain.handle('open-backups-folder', () => shell.openPath(getBackupDir()));
+
+ipcMain.handle('restore-backup', async () => {
+  if (!mainWindow) return { success: false, error: 'No active window' };
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose a backup to restore',
+    defaultPath: getBackupDir(),
+    filters: [{ name: 'Axiom Backup', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || filePaths.length === 0) return { success: false, canceled: true };
+  try {
+    const result = await restoreBackup(filePaths[0]);
+    notifyLocalChange();
+    return { success: true, ...result };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 });
 
 // IPC Handler for saving CSV using native dialog
@@ -120,54 +173,58 @@ ipcMain.handle('save-csv', async (event, { filename, content }) => {
 });
 
 // ─── Local Database (NeDB) Handlers ─────────────────────────────────────────
-import { db } from './db';
+// Every write is stamped with `updatedAt` and every delete leaves a tombstone,
+// which is what lets cloud sync propagate edits and deletions correctly.
+
+function assertCollection(collection: string) {
+  if (!isDataCollection(collection)) throw new Error(`Unknown collection "${collection}"`);
+}
+
+function stampUpdate(update: any) {
+  const updatedAt = new Date().toISOString();
+  if (Object.keys(update || {}).some((k) => k.startsWith('$'))) {
+    return { ...update, $set: { ...(update.$set || {}), updatedAt } };
+  }
+  return { ...clean(update || {}), updatedAt };
+}
 
 ipcMain.handle('db-find', async (event, { collection, query }) => {
-  return new Promise((resolve, reject) => {
-    (db as any)[collection].find(query || {}, (err: Error | null, docs: any[]) => {
-      if (err) reject(err);
-      else resolve(docs);
-    });
-  });
+  assertCollection(collection);
+  return findDocs(collection, query || {});
 });
 
 ipcMain.handle('db-insert', async (event, { collection, doc }) => {
-  return new Promise((resolve, reject) => {
-    (db as any)[collection].insert(doc, (err: Error | null, newDoc: any) => {
-      if (err) reject(err);
-      else resolve(newDoc);
-    });
-  });
+  assertCollection(collection);
+  const result = await insertDoc(collection, { ...clean(doc), updatedAt: new Date().toISOString() });
+  notifyLocalChange();
+  return result;
 });
 
 ipcMain.handle('db-update', async (event, { collection, query, update, options }) => {
-  return new Promise((resolve, reject) => {
-    (db as any)[collection].update(query, update, options || {}, (err: Error | null, numReplaced: number) => {
-      if (err) reject(err);
-      else resolve(numReplaced);
-    });
-  });
+  assertCollection(collection);
+  const num = await updateDocs(collection, query, stampUpdate(update), options || {});
+  notifyLocalChange();
+  return num;
 });
 
 ipcMain.handle('db-remove', async (event, { collection, query, options }) => {
-  return new Promise((resolve, reject) => {
-    (db as any)[collection].remove(query, options || {}, (err: Error | null, numRemoved: number) => {
-      if (err) reject(err);
-      else resolve(numRemoved);
-    });
-  });
+  assertCollection(collection);
+  const victims = await findDocs(collection, query || {});
+  const targets = options?.multi ? victims : victims.slice(0, 1);
+  await recordTombstones(collection, targets.map((d) => d.id));
+  const num = await removeDocs(collection, query, options || {});
+  notifyLocalChange();
+  return num;
 });
 
 ipcMain.handle('db-clear-all', async () => {
-  const collections = Object.keys(db);
-  const promises = collections.map((col) => {
-    return new Promise((resolve, reject) => {
-      (db as any)[col].remove({}, { multi: true }, (err: Error | null) => {
-        if (err) reject(err);
-        else resolve(true);
-      });
-    });
-  });
-  await Promise.all(promises);
-  return { success: true };
+  // Always keep a snapshot — this is the one operation that wipes everything.
+  const backupFile = await createBackup('before-clear-all');
+  for (const name of DATA_COLLECTIONS) {
+    const docs = await findDocs(name);
+    await recordTombstones(name, docs.map((d) => d.id));
+    await removeDocs(name, {}, { multi: true });
+  }
+  notifyLocalChange();
+  return { success: true, backupFile };
 });

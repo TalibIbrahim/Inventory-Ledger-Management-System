@@ -2,16 +2,24 @@ import React, { useEffect } from 'react';
 import {
   X,
   Sparkles,
-  Search,
-  Package,
-  Calendar,
+  Cloud,
+  Trash2,
+  HardDrive,
   Zap,
   ShieldCheck,
   Command,
   ArrowRight,
 } from 'lucide-react';
 
-export const CURRENT_APP_VERSION = '1.0.9';
+export const CURRENT_APP_VERSION = '1.0.10';
+
+// One-line highlights for the "Updated" banner shown at the top after an update.
+export const RELEASE_HIGHLIGHTS = [
+  'Your data now saves to the database (demo data removed)',
+  'Reliable cloud sync',
+  'Trash & Restore for vouchers',
+  'Automatic backups',
+];
 export const CHANGELOG_STORAGE_KEY = 'axiom_last_seen_changelog_version';
 
 interface ChangelogModalProps {
@@ -41,52 +49,52 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
 
   const features = [
     {
-      icon: <Zap className="w-5 h-5 text-emerald-600" />,
+      icon: <ShieldCheck className="w-5 h-5 text-emerald-600" />,
       bg: 'bg-emerald-50 border-emerald-100',
-      title: 'Automatic Updates from GitHub',
+      title: 'Your Data Now Saves to the Database',
       description:
-        'The app now checks for updates automatically on launch and every 30 minutes. When an update is ready, a "Restart To Update" banner appears — one click and you\'re on the latest version.',
-      shortcut: 'Auto',
+        'Fixed a problem where the app ran in demo mode and showed sample purchases and warehouses. Your own entries have been moved into the real database automatically, and the demo data is gone.',
+      shortcut: 'Automatic',
     },
     {
-      icon: <Search className="w-5 h-5 text-blue-600" />,
+      icon: <Cloud className="w-5 h-5 text-blue-600" />,
       bg: 'bg-blue-50 border-blue-100',
-      title: 'Customer Accounts & Credit Ledger',
+      title: 'Reliable Cloud Sync',
       description:
-        'Track outstanding balances per customer. View all unpaid invoices, record payments against specific sales, and see a complete credit/due summary at a glance.',
-      shortcut: 'Sales → Accounts',
+        'Everything syncs to your MongoDB cloud a few seconds after each change and every minute in the background — including edits and deletions. Test your connection and see the last sync time in Settings.',
+      shortcut: 'Settings → Cloud',
     },
     {
-      icon: <Calendar className="w-5 h-5 text-indigo-600" />,
+      icon: <Trash2 className="w-5 h-5 text-red-600" />,
+      bg: 'bg-red-50 border-red-100',
+      title: 'Trash & Restore for Vouchers',
+      description:
+        'Open any purchase, sale, return, opening stock or adjustment slip and choose "Move to Trash". Its stock movements are reversed. Changed your mind? Restore it from the Trash with one click.',
+      shortcut: 'Header → Trash',
+    },
+    {
+      icon: <HardDrive className="w-5 h-5 text-indigo-600" />,
       bg: 'bg-indigo-50 border-indigo-100',
-      title: 'Monthly Sales Report with Graphs',
+      title: 'Automatic Local Backups',
       description:
-        'Visualize monthly revenue, margins, and trends with interactive bar charts. Filter by date range, print or export — perfect for month-end reviews.',
-      shortcut: 'Sales → Monthly',
+        'A full backup is saved on this Mac when the app starts and every 4 hours (the last 60 are kept). You can also back up or restore manually from Settings.',
+      shortcut: 'Settings → Backups',
     },
     {
-      icon: <Package className="w-5 h-5 text-amber-600" />,
+      icon: <Zap className="w-5 h-5 text-amber-600" />,
       bg: 'bg-amber-50 border-amber-100',
-      title: 'Account-Level Payment Allocation',
+      title: 'Stock Adjustments Are Saved Properly',
       description:
-        'Record a single lump-sum payment against a customer account and have it automatically allocated across their oldest unpaid invoices (FIFO). No more manual per-invoice tracking.',
-      shortcut: 'Auto-allocated',
-    },
-    {
-      icon: <ShieldCheck className="w-5 h-5 text-teal-600" />,
-      bg: 'bg-teal-50 border-teal-100',
-      title: 'Seamless Data Preservation',
-      description:
-        'Your data is stored safely outside the app. Updates — whether automatic or manual — never touch your products, vouchers, ledger, or settings. Everything carries over seamlessly.',
-      shortcut: 'Always safe',
+        'Stock adjustment vouchers are now saved permanently. Voucher and ledger numbers can no longer repeat.',
+      shortcut: 'Fixed',
     },
     {
       icon: <Sparkles className="w-5 h-5 text-purple-600" />,
       bg: 'bg-purple-50 border-purple-100',
-      title: 'Sale Voucher Payment Tracking',
+      title: 'Updates Install Themselves',
       description:
-        'Every sale invoice now tracks payment status (Paid, Partial, Unpaid), paid amount, and remaining balance. Record payments directly from the voucher view.',
-      shortcut: 'On each invoice',
+        'When a new version is ready you\'ll see a "Restart To Update" banner. After each update, a banner at the top shows what\'s new.',
+      shortcut: 'Auto',
     },
   ];
 

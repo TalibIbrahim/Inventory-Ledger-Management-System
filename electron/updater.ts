@@ -205,7 +205,12 @@ function installUpdate() {
     const scriptPath = path.join(app.getPath('temp'), 'axiom_apply_update.sh');
     const targetApp = '/Applications/Axiom Stock Ledger.app';
     const scriptContent = `#!/bin/bash
-sleep 1.2
+# Wait (max ~30s) for the running app to fully quit — it flushes cloud sync first.
+for i in $(seq 1 60); do
+  kill -0 ${process.pid} 2>/dev/null || break
+  sleep 0.5
+done
+sleep 0.5
 DMG_PATH="${downloadedMacDmgPath}"
 TARGET_APP="${targetApp}"
 MOUNT_DIR=$(mktemp -d /tmp/axiom_mount_XXXXXX)

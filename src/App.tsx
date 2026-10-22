@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useInventoryLedger } from './hooks/useInventoryLedger';
 import { useAuth } from './contexts/AuthContext';
 import { LoginView } from './components/auth/LoginView';
@@ -22,7 +22,13 @@ import {
   ChangelogModal,
   CURRENT_APP_VERSION,
   CHANGELOG_STORAGE_KEY,
+  RELEASE_HIGHLIGHTS,
 } from './components/ChangelogModal';
+import { TrashView } from './components/trash/TrashView';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { TrashActionsContext } from './components/trash/TrashContext';
+import type { TrashKind } from './types/inventory';
+import { Sparkles, X } from 'lucide-react';
 import { formatPKR } from './utils/currency';
 
 export function App() {
@@ -37,6 +43,7 @@ export function App() {
     openingStocks,
     stockAdjustments,
     ledger,
+    trash,
     loading,
     createProduct,
     updateProduct,
@@ -51,26 +58,28 @@ export function App() {
     recordCustomerAccountPayment,
     getProductStockAtWarehouse,
     clearAllData,
+    trashVoucher,
+    restoreFromTrash,
+    deleteTrashPermanently,
   } = useInventoryLedger();
 
   // Navigation State
   const [activeSection, setActiveSection] = useState<MainSection>('purchase');
   const [activeSubOption, setActiveSubOption] = useState<SubOption>('purchase_voucher');
 
-  // Changelog Modal State (auto-opens first time v1.0.4 is run)
+  // Changelog: after every update a "What's New" banner shows at the top until dismissed.
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(
+    () => localStorage.getItem(CHANGELOG_STORAGE_KEY) !== CURRENT_APP_VERSION
+  );
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      const lastSeen = localStorage.getItem(CHANGELOG_STORAGE_KEY);
-      if (lastSeen !== CURRENT_APP_VERSION) {
-        setIsChangelogOpen(true);
-      }
-    }
-  }, [isAuthenticated]);
+  const markChangelogSeen = () => {
+    localStorage.setItem(CHANGELOG_STORAGE_KEY, CURRENT_APP_VERSION);
+    setShowUpdateBanner(false);
+  };
 
   const handleCloseChangelog = () => {
-    localStorage.setItem(CHANGELOG_STORAGE_KEY, CURRENT_APP_VERSION);
+    markChangelogSeen();
     setIsChangelogOpen(false);
   };
 
@@ -236,9 +245,51 @@ export function App() {
     return res;
   };
 
+  const TRASH_LABELS: Record<TrashKind, string> = {
+    purchase: 'Purchase voucher',
+    sale: 'Sale invoice',
+    saleReturn: 'Sale return',
+    openingStock: 'Opening stock voucher',
+    stockAdjustment: 'Stock adjustment',
+  };
+
+  const handleTrashVoucher = async (kind: TrashKind, voucherId: string, reason: string) => {
+    const res = await trashVoucher(kind, voucherId, reason);
+    if (res.success && res.entry) {
+      addToast(
+        'success',
+        `${res.entry.voucherNo} moved to Trash`,
+        `${TRASH_LABELS[kind]} removed and its stock reversed${
+          res.linkedReturns ? ` (plus ${res.linkedReturns} linked return${res.linkedReturns > 1 ? 's' : ''})` : ''
+        }. You can restore it from Trash.`
+      );
+    }
+    return res;
+  };
+
+  const handleRestoreFromTrash = async (trashId: string) => {
+    const res = await restoreFromTrash(trashId);
+    if (res.success && res.entry) {
+      addToast('success', `${res.entry.voucherNo} restored`, 'The voucher and its stock movements are back.');
+    } else {
+      addToast('error', 'Restore Failed', res.error);
+    }
+    return res;
+  };
+
+  const handleDeleteTrashForever = async (trashId: string) => {
+    const res = await deleteTrashPermanently(trashId);
+    if (res.success) {
+      addToast('info', 'Deleted Forever', 'The voucher was permanently removed from Trash.');
+    } else {
+      addToast('error', 'Delete Failed', res.error);
+    }
+    return res;
+  };
+
   const handleClearData = async () => {
     await clearAllData();
-    addToast('info', 'System Reset', 'All inventory data, vouchers, and transactions have been reset.');
+    addToast('info', 'System Reset', 'All data was reset. A backup of the previous data was saved first (Settings → Backups).');
   };
 
   if (!isAuthenticated) {
@@ -264,7 +315,34 @@ export function App() {
   }
 
   return (
+    <TrashActionsContext.Provider value={handleTrashVoucher}>
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
+      {/* "What's New" banner after an update */}
+      {showUpdateBanner && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 text-white px-4 py-2.5 text-xs">
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-emerald-300 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="font-bold">Updated to v{CURRENT_APP_VERSION}.</span>{' '}
+              <span className="text-slate-200">{RELEASE_HIGHLIGHTS.join(' • ')}</span>
+            </div>
+            <button
+              onClick={() => setIsChangelogOpen(true)}
+              className="flex-shrink-0 px-3 py-1 rounded-lg bg-white text-slate-900 font-semibold hover:bg-emerald-50 cursor-pointer"
+            >
+              See what's new
+            </button>
+            <button
+              onClick={markChangelogSeen}
+              className="flex-shrink-0 p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Apple-style Navigation Header */}
       <Header
         activeSection={activeSection}
@@ -273,10 +351,12 @@ export function App() {
         onSelectSubOption={(sub) => setActiveSubOption(sub)}
         onClearData={handleClearData}
         onOpenChangelog={() => setIsChangelogOpen(true)}
+        trashCount={trash.length}
       />
 
       {/* Main Module View Port */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <ErrorBoundary key={`${activeSection}:${activeSubOption}`}>
         {/* SECTION 1: PURCHASE */}
         {activeSection === 'purchase' && (
           <>
@@ -391,6 +471,12 @@ export function App() {
         {activeSection === 'settings' && (
           <SettingsView onOpenChangelog={() => setIsChangelogOpen(true)} />
         )}
+
+        {/* TRASH */}
+        {activeSection === 'trash' && (
+          <TrashView trash={trash} onRestore={handleRestoreFromTrash} onDeleteForever={handleDeleteTrashForever} />
+        )}
+        </ErrorBoundary>
       </main>
 
       {/* Footer */}
@@ -411,6 +497,7 @@ export function App() {
       {/* What's New in v1.0.4 Changelog Modal */}
       <ChangelogModal isOpen={isChangelogOpen} onClose={handleCloseChangelog} />
     </div>
+    </TrashActionsContext.Provider>
   );
 }
 export default App;

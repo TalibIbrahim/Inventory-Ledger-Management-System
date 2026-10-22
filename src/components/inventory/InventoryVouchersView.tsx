@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { SearchableSelect } from '../SearchableSelect';
 
+import { MoveToTrashButton } from '../trash/MoveToTrashButton';
 interface InventoryVouchersViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -798,7 +799,13 @@ export const InventoryVouchersView: React.FC<InventoryVouchersViewProps> = ({
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-between gap-2 pt-2">
+              <MoveToTrashButton
+                kind="openingStock"
+                voucherId={selectedOpening.id}
+                voucherNo={selectedOpening.voucherNo}
+                onDone={() => setSelectedOpening(null)}
+              />
               <button
                 onClick={() => setSelectedOpening(null)}
                 className="px-4 py-1.5 text-xs font-semibold rounded-xl bg-slate-900 text-white"
@@ -853,7 +860,13 @@ export const InventoryVouchersView: React.FC<InventoryVouchersViewProps> = ({
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-between gap-2 pt-2">
+              <MoveToTrashButton
+                kind="stockAdjustment"
+                voucherId={selectedAdjustment.id}
+                voucherNo={selectedAdjustment.voucherNo}
+                onDone={() => setSelectedAdjustment(null)}
+              />
               <button
                 onClick={() => setSelectedAdjustment(null)}
                 className="px-4 py-1.5 text-xs font-semibold rounded-xl bg-slate-900 text-white"
