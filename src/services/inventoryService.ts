@@ -29,6 +29,16 @@ import {
   INITIAL_STOCK_ADJUSTMENTS,
   INITIAL_LEDGER,
 } from '../data/mockData';
+import {
+  allocateReturnCredits,
+  getDue,
+  getPaid,
+  getSettlementDiscount,
+  recordKind,
+  roundMoney,
+  sameCustomer,
+  settleInvoice,
+} from '../utils/saleMath';
 export const DEFAULT_WAREHOUSES: Warehouse[] = [];
 
 const PRODUCTS_KEY = 'ledger_live_products_v1';
@@ -698,9 +708,13 @@ export class InventoryService {
     paidAmount?: number;
     paymentMethod?: string;
     dueDate?: string;
+    invoiceDiscount?: number;
   }): Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }> {
     if (!input.customerName.trim()) return { success: false, error: 'Customer name is required.' };
     if (!input.warehouseId) return { success: false, error: 'Please select a dispatch warehouse.' };
+    if (input.paymentStatus === 'PARTIAL' && !(Number(input.paidAmount) > 0)) {
+      return { success: false, error: 'Enter the amount the customer paid now.' };
+    }
     if (!input.items || input.items.length === 0) {
       return { success: false, error: 'At least one line item is required.' };
     }
@@ -720,6 +734,20 @@ export class InventoryService {
           success: false,
           error: `Insufficient stock at ${targetWh.name}! "${prod.name}" has only ${whStock} ${prod.uom} on hand. Requested: ${itemInput.quantity} ${prod.uom}.`,
         };
+      }
+    }
+
+    // Check the discount before anything (stock included) is changed.
+    const invoiceDiscount = roundMoney(Math.max(0, Number(input.invoiceDiscount) || 0));
+    if (invoiceDiscount > 0) {
+      const subtotal = input.items.reduce((acc, itemInput) => {
+        const prod = products.find((p) => p.id === itemInput.productId);
+        if (!prod) return acc;
+        const qty = Math.max(1, Number(itemInput.quantity) || 1);
+        return acc + qty * Math.max(0, Number(itemInput.unitPrice) || prod.salePrice);
+      }, 0);
+      if (invoiceDiscount >= roundMoney(subtotal)) {
+        return { success: false, error: 'Discount must be less than the bill amount.' };
       }
     }
 
@@ -792,15 +820,18 @@ export class InventoryService {
       newLedgerEntries.push(ledgerEntry);
     }
 
+    // Discount on the bill: line items keep their rates, the bill total is reduced.
+    totalAmount = roundMoney(totalAmount - invoiceDiscount);
+
     // Payment details computation
     const chosenStatus = input.paymentStatus || 'PAID';
     let initialPaid = 0;
     if (chosenStatus === 'PAID') {
       initialPaid = totalAmount;
     } else if (input.paidAmount !== undefined) {
-      initialPaid = Math.min(totalAmount, Math.max(0, Number(input.paidAmount) || 0));
+      initialPaid = roundMoney(Math.min(totalAmount, Math.max(0, Number(input.paidAmount) || 0)));
     }
-    const dueAmount = Math.max(0, totalAmount - initialPaid);
+    const dueAmount = roundMoney(Math.max(0, totalAmount - initialPaid));
     const resolvedStatus: PaymentStatus =
       dueAmount === 0 ? 'PAID' : initialPaid > 0 ? 'PARTIAL' : 'PAYMENT_DUE';
 
@@ -808,6 +839,7 @@ export class InventoryService {
     if (initialPaid > 0) {
       paymentHistory.push({
         id: `pay-${voucherId}-init`,
+        kind: 'PAYMENT',
         voucherId,
         invoiceNo,
         customerName: input.customerName.trim(),
@@ -834,6 +866,7 @@ export class InventoryService {
       recordedBy: input.recordedBy.trim() || 'System Operator',
       createdAt: new Date().toISOString(),
       paymentStatus: resolvedStatus,
+      ...(invoiceDiscount > 0 ? { invoiceDiscount } : {}),
       paidAmount: initialPaid,
       dueAmount,
       paymentMethod: input.paymentMethod || (resolvedStatus === 'PAID' ? 'CASH' : 'CREDIT'),
@@ -866,55 +899,87 @@ export class InventoryService {
     referenceNo?: string;
     notes?: string;
     recordedBy: string;
-  }): Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }> {
+    // Forgive whatever is still due after this payment (recorded as a discount, not cash).
+    waiveRemaining?: boolean;
+    discountReason?: string;
+  }): Promise<{ success: boolean; voucher?: SaleVoucher; discounted?: number; error?: string }> {
     const svList = this.getSaleVouchers();
     const index = svList.findIndex((v) => v.id === input.voucherId);
     if (index === -1) {
       return { success: false, error: 'Invoice not found.' };
     }
 
-    const voucher = { ...svList[index] };
-    const payAmount = Math.max(0, Number(input.amount) || 0);
-    if (payAmount <= 0) {
+    const voucher = svList[index];
+    const payAmount = roundMoney(Math.max(0, Number(input.amount) || 0));
+    const currentDue = roundMoney(getDue(voucher));
+    if (currentDue <= 0) {
+      return { success: false, error: `${voucher.invoiceNo} has no balance due.` };
+    }
+    if (payAmount <= 0 && !input.waiveRemaining) {
       return { success: false, error: 'Payment amount must be greater than 0.' };
     }
+    if (payAmount > currentDue) {
+      return {
+        success: false,
+        error: `Amount is more than the balance due on ${voucher.invoiceNo} (Rs. ${currentDue.toLocaleString('en-PK')}).`,
+      };
+    }
 
-    const currentPaid = voucher.paidAmount ?? (voucher.paymentStatus === 'PAYMENT_DUE' ? 0 : voucher.totalAmount);
-    const newPaid = Math.min(voucher.totalAmount, currentPaid + payAmount);
-    const newDue = Math.max(0, voucher.totalAmount - newPaid);
-    const newStatus: PaymentStatus = newDue === 0 ? 'PAID' : 'PARTIAL';
+    const date = input.date || new Date().toISOString().slice(0, 10);
+    const recordedBy = input.recordedBy.trim() || 'System Operator';
+    const newRecords: PaymentRecord[] = [];
 
-    const payRecord: PaymentRecord = {
-      id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      voucherId: voucher.id,
-      invoiceNo: voucher.invoiceNo,
-      customerName: voucher.customerName,
-      date: input.date || new Date().toISOString().slice(0, 10),
-      amount: payAmount,
-      paymentMethod: input.paymentMethod || 'CASH',
-      referenceNo: input.referenceNo?.trim(),
-      notes: input.notes?.trim() || 'Payment received from customer',
-      recordedBy: input.recordedBy.trim() || 'System Operator',
-      createdAt: new Date().toISOString(),
-    };
+    if (payAmount > 0) {
+      newRecords.push({
+        id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'PAYMENT',
+        voucherId: voucher.id,
+        invoiceNo: voucher.invoiceNo,
+        customerName: voucher.customerName,
+        date,
+        amount: payAmount,
+        paymentMethod: input.paymentMethod || 'CASH',
+        referenceNo: input.referenceNo?.trim(),
+        notes: input.notes?.trim() || 'Payment received from customer',
+        recordedBy,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
-    const updatedVoucher: SaleVoucher = {
+    const discounted = input.waiveRemaining ? roundMoney(currentDue - payAmount) : 0;
+    if (discounted > 0) {
+      newRecords.push({
+        id: `disc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'DISCOUNT',
+        voucherId: voucher.id,
+        invoiceNo: voucher.invoiceNo,
+        customerName: voucher.customerName,
+        date,
+        amount: discounted,
+        paymentMethod: 'DISCOUNT',
+        notes: input.discountReason?.trim() || 'Remaining balance forgiven',
+        recordedBy,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const updatedVoucher = settleInvoice({
       ...voucher,
-      paidAmount: newPaid,
-      dueAmount: newDue,
-      paymentStatus: newStatus,
-      paymentMethod: input.paymentMethod || voucher.paymentMethod,
-      paymentHistory: [...(voucher.paymentHistory || []), payRecord],
-    };
+      paidAmount: roundMoney(getPaid(voucher) + payAmount),
+      discountAmount: roundMoney(getSettlementDiscount(voucher) + discounted),
+      paymentMethod: payAmount > 0 ? input.paymentMethod || voucher.paymentMethod : voucher.paymentMethod,
+      paymentHistory: [...(voucher.paymentHistory || []), ...newRecords],
+    });
 
-    svList[index] = updatedVoucher;
-    await this.saveSaleVouchers(svList);
+    const next = [...svList];
+    next[index] = updatedVoucher;
+    await this.saveSaleVouchers(next);
 
     if (window.electronAPI) {
       await window.electronAPI.db.update('saleVouchers', { id: updatedVoucher.id }, updatedVoucher);
     }
 
-    return { success: true, voucher: updatedVoucher };
+    return { success: true, voucher: updatedVoucher, discounted };
   }
 
   static async recordCustomerAccountPayment(input: {
@@ -925,20 +990,19 @@ export class InventoryService {
     referenceNo?: string;
     notes?: string;
     recordedBy: string;
-  }): Promise<{ success: boolean; paidInvoicesCount: number; error?: string }> {
+    waiveRemaining?: boolean;
+    discountReason?: string;
+  }): Promise<{ success: boolean; paidInvoicesCount: number; discounted?: number; error?: string }> {
     const svList = this.getSaleVouchers();
-    let remainingAmount = Math.max(0, Number(input.amount) || 0);
-    if (remainingAmount <= 0) {
+    let remainingAmount = roundMoney(Math.max(0, Number(input.amount) || 0));
+    if (remainingAmount <= 0 && !input.waiveRemaining) {
       return { success: false, paidInvoicesCount: 0, error: 'Payment amount must be greater than 0.' };
     }
 
     // Find all invoices for this customer with outstanding due, oldest first
     const customerInvoices = svList
-      .filter((v) => v.customerName.toLowerCase() === input.customerName.toLowerCase())
-      .filter((v) => {
-        const due = v.dueAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? v.totalAmount : 0);
-        return due > 0;
-      })
+      .filter((v) => sameCustomer(v.customerName, input.customerName))
+      .filter((v) => getDue(v) > 0)
       .sort((a, b) => a.date.localeCompare(b.date));
 
     if (customerInvoices.length === 0) {
@@ -949,14 +1013,20 @@ export class InventoryService {
       };
     }
 
-    let affectedCount = 0;
-    for (const inv of customerInvoices) {
-      if (remainingAmount <= 0) break;
-      const currentPaid = inv.paidAmount ?? (inv.paymentStatus === 'PAYMENT_DUE' ? 0 : inv.totalAmount);
-      const currentDue = inv.dueAmount ?? Math.max(0, inv.totalAmount - currentPaid);
+    const totalDue = roundMoney(customerInvoices.reduce((acc, v) => acc + getDue(v), 0));
+    if (remainingAmount > totalDue) {
+      return {
+        success: false,
+        paidInvoicesCount: 0,
+        error: `Amount is more than ${input.customerName}'s total balance due (Rs. ${totalDue.toLocaleString('en-PK')}).`,
+      };
+    }
 
-      const allocation = Math.min(currentDue, remainingAmount);
-      if (allocation <= 0) continue;
+    let affectedCount = 0;
+    let discounted = 0;
+    for (const inv of customerInvoices) {
+      const allocation = roundMoney(Math.min(getDue(inv), remainingAmount));
+      if (allocation <= 0 && !input.waiveRemaining) break;
 
       const res = await this.recordCustomerPayment({
         voucherId: inv.id,
@@ -966,15 +1036,74 @@ export class InventoryService {
         referenceNo: input.referenceNo,
         notes: input.notes ? `${input.notes} (Account allocation)` : 'Account payment allocation',
         recordedBy: input.recordedBy,
+        waiveRemaining: input.waiveRemaining,
+        discountReason: input.discountReason,
       });
 
       if (res.success) {
         affectedCount++;
-        remainingAmount -= allocation;
+        remainingAmount = roundMoney(remainingAmount - allocation);
+        discounted = roundMoney(discounted + (res.discounted || 0));
       }
     }
 
-    return { success: true, paidInvoicesCount: affectedCount };
+    return { success: true, paidInvoicesCount: affectedCount, discounted };
+  }
+
+  /** Undo a forgiven balance: the amount becomes due again. */
+  static async removeInvoiceDiscount(
+    voucherId: string,
+    recordId: string
+  ): Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }> {
+    const svList = this.getSaleVouchers();
+    const index = svList.findIndex((v) => v.id === voucherId);
+    if (index === -1) return { success: false, error: 'Invoice not found.' };
+
+    const voucher = svList[index];
+    const record = (voucher.paymentHistory || []).find((p) => p.id === recordId && recordKind(p) === 'DISCOUNT');
+    if (!record) return { success: false, error: 'Discount entry not found.' };
+
+    const updatedVoucher = settleInvoice({
+      ...voucher,
+      discountAmount: roundMoney(Math.max(0, getSettlementDiscount(voucher) - record.amount)),
+      paymentHistory: (voucher.paymentHistory || []).filter((p) => p.id !== recordId),
+    });
+
+    const next = [...svList];
+    next[index] = updatedVoucher;
+    await this.saveSaleVouchers(next);
+    if (window.electronAPI) {
+      await window.electronAPI.db.update('saleVouchers', { id: updatedVoucher.id }, updatedVoucher);
+    }
+    return { success: true, voucher: updatedVoucher };
+  }
+
+  /**
+   * Re-apply customers' sale returns to their invoice balances (see allocateReturnCredits).
+   * Run after a return is created, or a sale/return is trashed or restored.
+   */
+  private static async reconcileReturnCredits(customerNames: string[]): Promise<void> {
+    const names = [...new Set(customerNames.map((n) => n.trim().toLowerCase()).filter(Boolean))];
+    for (const name of names) {
+      const invoices = this.cache.sv.filter((v) => sameCustomer(v.customerName, name));
+      const returns = this.cache.sr.filter((r) => sameCustomer(r.customerName, name));
+      const changed = allocateReturnCredits(invoices, returns);
+
+      if (changed.invoices.length) {
+        const byId = new Map(changed.invoices.map((v) => [v.id, v]));
+        await this.saveSaleVouchers(this.cache.sv.map((v) => byId.get(v.id) ?? v));
+        if (window.electronAPI) {
+          for (const v of changed.invoices) await window.electronAPI.db.update('saleVouchers', { id: v.id }, v);
+        }
+      }
+      if (changed.returns.length) {
+        const byId = new Map(changed.returns.map((r) => [r.id, r]));
+        await this.saveSaleReturns(this.cache.sr.map((r) => byId.get(r.id) ?? r));
+        if (window.electronAPI) {
+          for (const r of changed.returns) await window.electronAPI.db.update('saleReturns', { id: r.id }, r);
+        }
+      }
+    }
   }
 
   // ─── Sale Returns ───────────────────────────────────────────────────────────
@@ -1094,6 +1223,7 @@ export class InventoryService {
       notes: input.notes?.trim() || '',
       recordedBy: input.recordedBy.trim() || 'System Operator',
       createdAt: new Date().toISOString(),
+      creditApplied: [], // filled in by reconcileReturnCredits below
     };
 
     await this.saveSaleReturns([newVoucher, ...srList]);
@@ -1106,7 +1236,10 @@ export class InventoryService {
       for (const p of updatedProducts) await window.electronAPI.db.update('products', { id: p.id }, p);
     }
 
-    return { success: true, voucher: newVoucher };
+    // Take the returned value off the customer's unpaid invoices.
+    await this.reconcileReturnCredits([newVoucher.customerName]);
+    const saved = this.cache.sr.find((r) => r.id === newVoucher.id) ?? newVoucher;
+    return { success: true, voucher: saved };
   }
 
   // ─── Inventory Vouchers (Opening Stock & Stock Adjustment) ─────────────────
@@ -1539,6 +1672,9 @@ export class InventoryService {
     }
 
     await this.rebuildStock(new Set(ledgerDocs.map((e) => e.productId)));
+    if (kind === 'sale' || kind === 'saleReturn') {
+      await this.reconcileReturnCredits(groups.flatMap((g) => g.vouchers.map((v) => v.customerName || '')));
+    }
     return { success: true, entry, linkedReturns: groups.length > 1 ? groups[1].vouchers.length : 0 };
   }
 
@@ -1588,6 +1724,10 @@ export class InventoryService {
     await this.saveTrash(this.cache.trash.filter((t) => t.id !== trashId));
 
     await this.rebuildStock(new Set(ledgerDocs.map((e) => e.productId)));
+    const restoredCustomers = entry.records
+      .filter((r) => r.collection === 'saleVouchers' || r.collection === 'saleReturns')
+      .flatMap((r) => r.docs.map((d) => d.customerName || ''));
+    if (restoredCustomers.length) await this.reconcileReturnCredits(restoredCustomers);
     return { success: true, entry };
   }
 

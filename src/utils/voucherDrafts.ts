@@ -33,6 +33,7 @@ export interface SaleDraftData {
   paymentMethod?: string;
   dueDate?: string;
   paidAmount?: string;
+  discount?: string;
   savedAt?: number;
 }
 

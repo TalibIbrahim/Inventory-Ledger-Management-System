@@ -12,6 +12,7 @@ import type {
   TrashKind,
 } from '../types/inventory';
 import { InventoryService } from '../services/inventoryService';
+import { summarizeSales } from '../utils/saleMath';
 
 export function useInventoryLedger() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -132,6 +133,7 @@ export function useInventoryLedger() {
       paidAmount?: number;
       paymentMethod?: string;
       dueDate?: string;
+      invoiceDiscount?: number;
     }) => {
       const res = await InventoryService.createSaleVoucher(input);
       if (res.success) refreshAll();
@@ -149,6 +151,8 @@ export function useInventoryLedger() {
       referenceNo?: string;
       notes?: string;
       recordedBy: string;
+      waiveRemaining?: boolean;
+      discountReason?: string;
     }) => {
       const res = await InventoryService.recordCustomerPayment(input);
       if (res.success) refreshAll();
@@ -166,8 +170,19 @@ export function useInventoryLedger() {
       referenceNo?: string;
       notes?: string;
       recordedBy: string;
+      waiveRemaining?: boolean;
+      discountReason?: string;
     }) => {
       const res = await InventoryService.recordCustomerAccountPayment(input);
+      if (res.success) refreshAll();
+      return res;
+    },
+    [refreshAll]
+  );
+
+  const removeInvoiceDiscount = useCallback(
+    async (voucherId: string, recordId: string) => {
+      const res = await InventoryService.removeInvoiceDiscount(voucherId, recordId);
       if (res.success) refreshAll();
       return res;
     },
@@ -245,19 +260,12 @@ export function useInventoryLedger() {
     }
 
     const totalPurchasesAmount = purchaseVouchers.reduce((acc, pv) => acc + pv.totalAmount, 0);
-    const totalSalesAmount = saleVouchers.reduce((acc, sv) => acc + sv.totalAmount, 0);
-    const totalReturnsAmount = saleReturns.reduce((acc, sr) => acc + sr.totalAmount, 0);
-    const totalSalesPaid = saleVouchers.reduce(
-      (acc, sv) => acc + (sv.paidAmount ?? (sv.paymentStatus === 'PAYMENT_DUE' ? 0 : sv.totalAmount)),
-      0
-    );
-    const totalReceivablesDue = saleVouchers.reduce(
-      (acc, sv) =>
-        acc +
-        (sv.dueAmount ??
-          (sv.paymentStatus === 'PAYMENT_DUE' ? sv.totalAmount : 0)),
-      0
-    );
+    const sales = summarizeSales(saleVouchers, saleReturns);
+    const totalSalesAmount = sales.grossSales;
+    const totalReturnsAmount = sales.returns;
+    const totalDiscountsAmount = sales.discounts;
+    const totalSalesPaid = sales.collected;
+    const totalReceivablesDue = sales.due;
 
     return {
       totalInventoryValue,
@@ -267,6 +275,7 @@ export function useInventoryLedger() {
       totalPurchasesAmount,
       totalSalesAmount,
       totalReturnsAmount,
+      totalDiscountsAmount,
       totalSalesPaid,
       totalReceivablesDue,
       totalProductsCount: products.length,
@@ -332,6 +341,7 @@ export function useInventoryLedger() {
     createStockAdjustmentVoucher,
     recordCustomerPayment,
     recordCustomerAccountPayment,
+    removeInvoiceDiscount,
     getProductStockAtWarehouse,
     clearAllData,
     trashVoucher,

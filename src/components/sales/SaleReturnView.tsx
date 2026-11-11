@@ -15,6 +15,7 @@ import {
 import { SearchableSelect } from '../SearchableSelect';
 
 import { MoveToTrashButton } from '../trash/MoveToTrashButton';
+import { useNewEntryShortcut } from '../../utils/shortcuts';
 interface SaleReturnViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -90,6 +91,12 @@ export const SaleReturnView: React.FC<SaleReturnViewProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
+
+  useNewEntryShortcut(() => {
+    if (isModalOpen) return;
+    setErrorMsg('');
+    setIsModalOpen(true);
+  });
 
   const handleAddLine = () => {
     const firstProd = products[0];

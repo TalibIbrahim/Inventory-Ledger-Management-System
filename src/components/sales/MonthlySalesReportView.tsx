@@ -2,6 +2,16 @@ import React, { useState, useMemo } from 'react';
 import type { SaleVoucher, SaleReturnVoucher, Product, Warehouse } from '../../types/inventory';
 import { formatPKR } from '../../utils/currency';
 import {
+  getDue,
+  getGrossAmount,
+  getInvoiceDiscount,
+  getNetSale,
+  getPaid,
+  getReturnCredit,
+  getSettlementDiscount,
+  summarizeSales,
+} from '../../utils/saleMath';
+import {
   BarChart3,
   Calendar,
   ChevronLeft,
@@ -136,19 +146,17 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
 
   // Monthly KPIs
   const kpis = useMemo(() => {
-    const grossSales = monthVouchers.reduce((acc, v) => acc + v.totalAmount, 0);
-    const returnsTotal = monthReturns.reduce((acc, r) => acc + r.totalAmount, 0);
-    const netSales = grossSales - returnsTotal;
+    // Gross = goods at entered rates. Net = gross − discounts − returns. Cash = only money received.
+    const summary = summarizeSales(monthVouchers, monthReturns);
+    const grossSales = summary.grossSales;
+    const discountsTotal = summary.discounts;
+    const returnsTotal = summary.returns;
+    const netSales = summary.netSales;
     const totalUnits = monthVouchers.reduce((acc, v) => acc + v.totalQuantity, 0);
+    const billedTotal = monthVouchers.reduce((acc, v) => acc + v.totalAmount, 0);
 
-    const paidTotal = monthVouchers.reduce(
-      (acc, v) => acc + (v.paidAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? 0 : v.totalAmount)),
-      0
-    );
-    const dueTotal = monthVouchers.reduce(
-      (acc, v) => acc + (v.dueAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? v.totalAmount : 0)),
-      0
-    );
+    const paidTotal = summary.collected;
+    const dueTotal = summary.due;
 
     // COGS estimation
     let totalCogs = 0;
@@ -162,7 +170,7 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
     const marginPercent = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
 
     // Previous month comparison
-    const prevGross = prevMonthVouchers.reduce((acc, v) => acc + v.totalAmount, 0);
+    const prevGross = summarizeSales(prevMonthVouchers, []).grossSales;
     const growthPercent =
       prevGross > 0 ? ((grossSales - prevGross) / prevGross) * 100 : grossSales > 0 ? 100 : 0;
 
@@ -170,8 +178,10 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
 
     return {
       grossSales,
+      discountsTotal,
       returnsTotal,
       netSales,
+      billedTotal,
       paidTotal,
       dueTotal,
       totalUnits,
@@ -220,9 +230,9 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
       const day = Number(v.date.slice(8, 10));
       if (dailyMap.has(day)) {
         const entry = dailyMap.get(day)!;
-        const paid = v.paidAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? 0 : v.totalAmount);
-        const due = v.dueAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? v.totalAmount : 0);
-        entry.gross += v.totalAmount;
+        const paid = getPaid(v);
+        const due = getDue(v);
+        entry.gross += getNetSale(v);
         entry.paid += paid;
         entry.due += due;
         entry.units += v.totalQuantity;
@@ -247,15 +257,9 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
       const [y, m] = mStr.split('-').map(Number);
       const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' });
       const vouchers = saleVouchers.filter((v) => v.date && v.date.startsWith(mStr));
-      const gross = vouchers.reduce((acc, v) => acc + v.totalAmount, 0);
-      const paid = vouchers.reduce(
-        (acc, v) => acc + (v.paidAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? 0 : v.totalAmount)),
-        0
-      );
-      const due = vouchers.reduce(
-        (acc, v) => acc + (v.dueAmount ?? (v.paymentStatus === 'PAYMENT_DUE' ? v.totalAmount : 0)),
-        0
-      );
+      const gross = vouchers.reduce((acc, v) => acc + getNetSale(v), 0);
+      const paid = vouchers.reduce((acc, v) => acc + getPaid(v), 0);
+      const due = vouchers.reduce((acc, v) => acc + getDue(v), 0);
       return {
         monthKey: mStr,
         label,
@@ -320,16 +324,16 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
     const map = new Map<string, { customerName: string; invoices: number; revenue: number; due: number }>();
     monthVouchers.forEach((sv) => {
       const existing = map.get(sv.customerName);
-      const due = sv.dueAmount ?? (sv.paymentStatus === 'PAYMENT_DUE' ? sv.totalAmount : 0);
+      const due = getDue(sv);
       if (existing) {
         existing.invoices += 1;
-        existing.revenue += sv.totalAmount;
+        existing.revenue += getNetSale(sv);
         existing.due += due;
       } else {
         map.set(sv.customerName, {
           customerName: sv.customerName,
           invoices: 1,
-          revenue: sv.totalAmount,
+          revenue: getNetSale(sv),
           due,
         });
       }
@@ -443,7 +447,7 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
               {formatPKR(kpis.netSales)}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              Less {formatPKR(kpis.returnsTotal)} returns
+              Less {formatPKR(kpis.discountsTotal)} discounts, {formatPKR(kpis.returnsTotal)} returns
             </p>
           </div>
         </div>
@@ -805,7 +809,11 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              <span>Paid ({sv.paymentMethod === 'BANK_TRANSFER' ? 'Bank' : 'Cash'})</span>
+                              <span>
+                                {getSettlementDiscount(sv) > 0
+                                  ? `Settled (${formatPKR(getSettlementDiscount(sv))} disc.)`
+                                  : `Paid (${sv.paymentMethod === 'BANK_TRANSFER' ? 'Bank' : 'Cash'})`}
+                              </span>
                             </span>
                           )}
                         </td>
@@ -965,11 +973,17 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
                   1. Executive Financial Summary
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
                   <div>
                     <div className="text-[10px] text-slate-500 uppercase">Gross Invoiced</div>
                     <div className="text-sm font-mono font-bold text-slate-900 mt-0.5">
                       {formatPKR(kpis.grossSales)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 uppercase">Discounts Allowed</div>
+                    <div className="text-sm font-mono font-bold text-purple-700 mt-0.5">
+                      {formatPKR(kpis.discountsTotal)}
                     </div>
                   </div>
                   <div>
@@ -991,7 +1005,7 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                     </div>
                   </div>
                   <div className="col-span-2 pt-2 border-t border-slate-200">
-                    <div className="text-[10px] text-slate-500 uppercase">Net Revenue (After Returns)</div>
+                    <div className="text-[10px] text-slate-500 uppercase">Net Revenue (After Discounts & Returns)</div>
                     <div className="text-base font-mono font-bold text-blue-700 mt-0.5">
                       {formatPKR(kpis.netSales)}
                     </div>
@@ -1019,7 +1033,7 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                         <th className="py-2 px-3">Client</th>
                         <th className="py-2 px-3">Warehouse</th>
                         <th className="py-2 px-3 text-right">Units</th>
-                        <th className="py-2 px-3 text-right">Gross (PKR)</th>
+                        <th className="py-2 px-3 text-right">Billed (PKR)</th>
                         <th className="py-2 px-3 text-right">Collection Status</th>
                       </tr>
                     </thead>
@@ -1039,6 +1053,8 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                               ? 'Payment Due'
                               : v.paymentStatus === 'PARTIAL'
                               ? 'Partial Due'
+                              : getSettlementDiscount(v) > 0
+                              ? `Settled (${formatPKR(getSettlementDiscount(v))} disc.)`
                               : 'Paid'}
                           </td>
                         </tr>
@@ -1049,7 +1065,7 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                         <td colSpan={4} className="py-2 px-3">Total Monthly Invoices ({monthVouchers.length})</td>
                         <td className="py-2 px-3 text-right font-mono">{kpis.totalUnits}</td>
                         <td className="py-2 px-3 text-right font-mono text-blue-700">
-                          {formatPKR(kpis.grossSales)}
+                          {formatPKR(kpis.billedTotal)}
                         </td>
                         <td></td>
                       </tr>
@@ -1140,9 +1156,14 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                       <span className="text-amber-700 font-bold inline-flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5" /> Payment Due (Credit Dispatch)
                       </span>
+                    ) : selectedInvoice.paymentStatus === 'PARTIAL' ? (
+                      <span className="text-blue-700 font-bold inline-flex items-center gap-1">
+                        <Banknote className="w-3.5 h-3.5" /> Partially Paid
+                      </span>
                     ) : (
                       <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Paid on Hand ({selectedInvoice.paymentMethod || 'Cash'})
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+                        {getPaid(selectedInvoice) > 0 && ` — Paid (${selectedInvoice.paymentMethod || 'Cash'})`}
                       </span>
                     )}
                   </div>
@@ -1151,13 +1172,29 @@ export const MonthlySalesReportView: React.FC<MonthlySalesReportViewProps> = ({
                   <div>
                     <div className="text-[11px] text-slate-400 uppercase font-medium">Received</div>
                     <div className="text-xs font-mono font-semibold text-emerald-700 mt-0.5">
-                      {formatPKR(selectedInvoice.paidAmount ?? (selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? 0 : selectedInvoice.totalAmount))}
+                      {formatPKR(getPaid(selectedInvoice))}
                     </div>
+                    {getInvoiceDiscount(selectedInvoice) > 0 && (
+                      <div className="text-[11px] text-purple-700 font-mono mt-1">
+                        Discount on bill: {formatPKR(getInvoiceDiscount(selectedInvoice))} (goods worth{' '}
+                        {formatPKR(getGrossAmount(selectedInvoice))})
+                      </div>
+                    )}
+                    {getSettlementDiscount(selectedInvoice) > 0 && (
+                      <div className="text-[11px] text-purple-700 font-mono">
+                        Discount allowed: {formatPKR(getSettlementDiscount(selectedInvoice))}
+                      </div>
+                    )}
+                    {getReturnCredit(selectedInvoice) > 0 && (
+                      <div className="text-[11px] text-slate-600 font-mono">
+                        Cleared by returns: {formatPKR(getReturnCredit(selectedInvoice))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-[11px] text-slate-400 uppercase font-medium">Balance Due</div>
                     <div className="text-xs font-mono font-bold text-amber-700 mt-0.5">
-                      {formatPKR(selectedInvoice.dueAmount ?? (selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? selectedInvoice.totalAmount : 0))}
+                      {formatPKR(getDue(selectedInvoice))}
                     </div>
                   </div>
                 </div>

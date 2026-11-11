@@ -1,7 +1,7 @@
 {
   "name": "inventory-management",
   "private": true,
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Axiom Stock Ledger",
   "author": "Talib Ibrahim",
   "repository": {
@@ -14,7 +14,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build && electron-builder",
     "lint": "oxlint",
-    "test": "node --experimental-strip-types --test src/utils/voucherValidation.test.ts",
+    "test": "node --experimental-strip-types --test src/utils/voucherValidation.test.ts src/utils/saleMath.test.ts",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"cross-env NODE_ENV=development vite\" \"electron .\""
   },

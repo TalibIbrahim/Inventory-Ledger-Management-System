@@ -30,6 +30,7 @@ import {
 } from '../../utils/voucherDrafts';
 
 import { MoveToTrashButton } from '../trash/MoveToTrashButton';
+import { useNewEntryShortcut } from '../../utils/shortcuts';
 interface PurchaseVoucherViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -106,6 +107,10 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
     setIsModalOpen(true);
   };
 
+  useNewEntryShortcut(() => {
+    if (!isModalOpen) handleOpenModal();
+  });
+
   const handleDiscardDraft = () => {
     clearVoucherDraft(DRAFT_STORAGE_KEYS.PURCHASE_VOUCHER);
     setHasRestoredDraft(false);
@@ -166,7 +171,7 @@ export const PurchaseVoucherView: React.FC<PurchaseVoucherViewProps> = ({
   };
 
   const handleLineKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       if (index === lineItems.length - 1) {
         handleAddLine();

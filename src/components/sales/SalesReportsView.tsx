@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Product, Warehouse, SaleVoucher, SaleReturnVoucher } from '../../types/inventory';
 import { formatPKR } from '../../utils/currency';
+import { getGrossAmount, getTotalDiscount, summarizeSales } from '../../utils/saleMath';
 import { InventoryService } from '../../services/inventoryService';
 import {
   BarChart3,
@@ -63,9 +64,11 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
 
   // Overall Financial KPIs
   const kpis = useMemo(() => {
-    const grossSales = filteredVouchers.reduce((acc, sv) => acc + sv.totalAmount, 0);
-    const returnsTotal = filteredReturns.reduce((acc, sr) => acc + sr.totalAmount, 0);
-    const netSales = grossSales - returnsTotal;
+    const summary = summarizeSales(filteredVouchers, filteredReturns);
+    const grossSales = summary.grossSales;
+    const discountsTotal = summary.discounts;
+    const returnsTotal = summary.returns;
+    const netSales = summary.netSales;
 
     // Estimate COGS
     let totalCogs = 0;
@@ -83,6 +86,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
 
     return {
       grossSales,
+      discountsTotal,
       returnsTotal,
       netSales,
       totalCogs,
@@ -101,6 +105,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
         invoiceCount: number;
         totalUnits: number;
         grossSales: number;
+        discountsTotal: number;
         returnsTotal: number;
         netSales: number;
         lastOrderDate: string;
@@ -112,8 +117,9 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
       if (existing) {
         existing.invoiceCount += 1;
         existing.totalUnits += sv.totalQuantity;
-        existing.grossSales += sv.totalAmount;
-        existing.netSales += sv.totalAmount;
+        existing.grossSales += getGrossAmount(sv);
+        existing.discountsTotal += getTotalDiscount(sv);
+        existing.netSales += getGrossAmount(sv) - getTotalDiscount(sv);
         if (sv.date > existing.lastOrderDate) {
           existing.lastOrderDate = sv.date;
         }
@@ -122,9 +128,10 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
           customerName: sv.customerName,
           invoiceCount: 1,
           totalUnits: sv.totalQuantity,
-          grossSales: sv.totalAmount,
+          grossSales: getGrossAmount(sv),
+          discountsTotal: getTotalDiscount(sv),
           returnsTotal: 0,
-          netSales: sv.totalAmount,
+          netSales: getGrossAmount(sv) - getTotalDiscount(sv),
           lastOrderDate: sv.date,
         });
       }
@@ -207,6 +214,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
         'Invoice Count',
         'Units Sold',
         'Gross Sales (PKR)',
+        'Discounts (PKR)',
         'Returns Credited (PKR)',
         'Net Sales (PKR)',
         'Last Invoice Date',
@@ -216,6 +224,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
         c.invoiceCount,
         c.totalUnits,
         c.grossSales,
+        c.discountsTotal,
         c.returnsTotal,
         c.netSales,
         c.lastOrderDate,
@@ -291,7 +300,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
 
         <div className="p-4 rounded-2xl bg-white border border-black/[0.06] shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Net Sales (Post-Return)</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">Net Sales</span>
             <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
               <TrendingUp className="w-4 h-4" />
             </span>
@@ -301,7 +310,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
               {formatPKR(kpis.netSales)}
             </div>
             <p className="text-xs text-amber-600 mt-1">
-              -{formatPKR(kpis.returnsTotal)} returned
+              -{formatPKR(kpis.discountsTotal)} discounts, -{formatPKR(kpis.returnsTotal)} returned
             </p>
           </div>
         </div>
@@ -431,6 +440,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
                   <th className="py-3 px-4 text-center">Invoices</th>
                   <th className="py-3 px-4 text-right">Units Sold</th>
                   <th className="py-3 px-4 text-right">Gross Sales (PKR)</th>
+                  <th className="py-3 px-4 text-right">Discounts (PKR)</th>
                   <th className="py-3 px-4 text-right">Returns (PKR)</th>
                   <th className="py-3 px-4 text-right">Net Revenue (PKR)</th>
                   <th className="py-3 px-4 text-right">Last Order</th>
@@ -439,7 +449,7 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
               <tbody className="divide-y divide-slate-100">
                 {customerReports.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
                       <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                       <p className="font-medium text-slate-500">No customer sales data found</p>
                     </td>
@@ -458,6 +468,9 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-slate-600">
                         {formatPKR(c.grossSales)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-purple-700">
+                        {c.discountsTotal > 0 ? `-${formatPKR(c.discountsTotal)}` : '-'}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-amber-700">
                         {c.returnsTotal > 0 ? `-${formatPKR(c.returnsTotal)}` : '-'}

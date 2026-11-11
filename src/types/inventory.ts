@@ -77,8 +77,13 @@ export interface SaleVoucherLine {
 export type PaymentStatus = 'PAID' | 'PAYMENT_DUE' | 'PARTIAL';
 export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE' | 'CREDIT';
 
+// PAYMENT = money received. DISCOUNT = balance forgiven (not cash). RETURN = credit from a sale return.
+export type PaymentRecordKind = 'PAYMENT' | 'DISCOUNT' | 'RETURN';
+
 export interface PaymentRecord {
   id: string;
+  kind?: PaymentRecordKind; // Defaults to 'PAYMENT' if omitted
+  returnId?: string; // Set on RETURN records
   voucherId: string;
   invoiceNo: string;
   customerName: string;
@@ -100,13 +105,16 @@ export interface SaleVoucher {
   warehouseName: string;
   items: SaleVoucherLine[];
   totalQuantity: number;
-  totalAmount: number; // Rs.
+  totalAmount: number; // Rs. billed to the customer (line items minus invoiceDiscount)
   notes: string;
   recordedBy: string;
   createdAt: string;
   paymentStatus?: PaymentStatus; // Defaults to 'PAID' if omitted
-  paidAmount?: number; // Rs. collected so far
-  dueAmount?: number; // Rs. outstanding
+  invoiceDiscount?: number; // Rs. discount given on the bill itself
+  paidAmount?: number; // Rs. collected so far (cash only)
+  discountAmount?: number; // Rs. of the balance forgiven after billing
+  returnCredit?: number; // Rs. of the balance cleared by sale returns
+  dueAmount?: number; // Rs. outstanding = totalAmount - paid - discount - returnCredit
   paymentMethod?: PaymentMethod | string;
   dueDate?: string;
   paymentHistory?: PaymentRecord[];
@@ -140,6 +148,9 @@ export interface SaleReturnVoucher {
   notes: string;
   recordedBy: string;
   createdAt: string;
+  // Present on returns made from v1.0.11 on: how much of this return cleared invoice balances.
+  // Older returns don't have it and are left exactly as they were.
+  creditApplied?: Array<{ invoiceId: string; invoiceNo: string; amount: number }>;
 }
 
 // Inventory Opening Stock Line Item & Voucher

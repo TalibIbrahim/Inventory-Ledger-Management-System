@@ -24,7 +24,9 @@ import {
   Calendar,
   Download,
   Trash2,
+  Keyboard,
 } from 'lucide-react';
+import { MOD_KEY } from '../utils/shortcuts';
 
 export type MainSection = 'purchase' | 'sales' | 'inventory' | 'settings' | 'trash';
 
@@ -51,6 +53,7 @@ interface HeaderProps {
   onSelectSubOption: (subOption: SubOption) => void;
   onClearData: () => void;
   onOpenChangelog?: () => void;
+  onOpenShortcuts?: () => void;
   trashCount?: number;
 }
 
@@ -61,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectSubOption,
   onClearData,
   onOpenChangelog,
+  onOpenShortcuts,
   trashCount = 0,
 }) => {
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
@@ -195,6 +199,16 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <Sparkles className="w-3 h-3 text-indigo-500" />
                     <span>v{CURRENT_APP_VERSION} What's New</span>
+                  </button>
+                )}
+                {onOpenShortcuts && (
+                  <button
+                    onClick={onOpenShortcuts}
+                    className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                    title="Keyboard shortcuts"
+                  >
+                    <Keyboard className="w-3 h-3 text-slate-500" />
+                    <span>Shortcuts {MOD_KEY}/</span>
                   </button>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useInventoryLedger } from './hooks/useInventoryLedger';
 import { useAuth } from './contexts/AuthContext';
 import { LoginView } from './components/auth/LoginView';
@@ -18,18 +18,36 @@ import { LocationView } from './components/inventory/LocationView';
 import { SettingsView } from './components/SettingsView';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
-import {
-  ChangelogModal,
-  CURRENT_APP_VERSION,
-  CHANGELOG_STORAGE_KEY,
-  RELEASE_HIGHLIGHTS,
-} from './components/ChangelogModal';
+import { ChangelogModal, CURRENT_APP_VERSION, CHANGELOG_STORAGE_KEY } from './components/ChangelogModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
 import { TrashView } from './components/trash/TrashView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TrashActionsContext } from './components/trash/TrashContext';
 import type { TrashKind } from './types/inventory';
-import { Sparkles, X } from 'lucide-react';
 import { formatPKR } from './utils/currency';
+import { isModKey, requestNewEntry, submitActiveForm } from './utils/shortcuts';
+
+// ⌘1–⌘8 / ⌘, — where each number key jumps to.
+const JUMP_KEYS: Record<string, [MainSection, SubOption | null]> = {
+  '1': ['sales', 'sale_voucher'],
+  '2': ['sales', 'customer_accounts'],
+  '3': ['sales', 'sale_return'],
+  '4': ['sales', 'monthly_sales'],
+  '5': ['sales', 'sales_reports'],
+  '6': ['purchase', 'purchase_voucher'],
+  '7': ['inventory', 'product_info'],
+  '8': ['inventory', 'inventory_reports'],
+  ',': ['settings', null],
+};
+const NEW_ENTRY_SCREENS: SubOption[] = ['sale_voucher', 'purchase_voucher', 'sale_return'];
+
+const hasSeenChangelog = () => {
+  try {
+    return localStorage.getItem(CHANGELOG_STORAGE_KEY) === CURRENT_APP_VERSION;
+  } catch {
+    return false;
+  }
+};
 
 export function App() {
   const { isAuthenticated } = useAuth();
@@ -56,6 +74,7 @@ export function App() {
     createStockAdjustmentVoucher,
     recordCustomerPayment,
     recordCustomerAccountPayment,
+    removeInvoiceDiscount,
     getProductStockAtWarehouse,
     clearAllData,
     trashVoucher,
@@ -67,21 +86,58 @@ export function App() {
   const [activeSection, setActiveSection] = useState<MainSection>('purchase');
   const [activeSubOption, setActiveSubOption] = useState<SubOption>('purchase_voucher');
 
-  // Changelog: after every update a "What's New" banner shows at the top until dismissed.
-  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
-  const [showUpdateBanner, setShowUpdateBanner] = useState(
-    () => localStorage.getItem(CHANGELOG_STORAGE_KEY) !== CURRENT_APP_VERSION
-  );
-
-  const markChangelogSeen = () => {
-    localStorage.setItem(CHANGELOG_STORAGE_KEY, CURRENT_APP_VERSION);
-    setShowUpdateBanner(false);
-  };
+  // Changelog: after an update the "What's New" popup opens once, then only from the header badge.
+  const [isChangelogOpen, setIsChangelogOpen] = useState(() => !hasSeenChangelog());
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
   const handleCloseChangelog = () => {
-    markChangelogSeen();
+    try {
+      localStorage.setItem(CHANGELOG_STORAGE_KEY, CURRENT_APP_VERSION);
+    } catch {
+      // Storage unavailable: the popup may show again next launch, which is harmless.
+    }
     setIsChangelogOpen(false);
   };
+
+  // Keyboard shortcuts (⌘ on Mac, Ctrl on Windows). The full list lives in utils/shortcuts.
+  useEffect(() => {
+    if (!isAuthenticated || loading) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isModKey(e) || e.altKey || e.repeat) return;
+      const key = e.key.toLowerCase();
+
+      if (key === 'enter') {
+        // Stop the browser's own Enter-submits-form so the form is saved exactly once.
+        e.preventDefault();
+        submitActiveForm();
+        return;
+      }
+      if (key === '/') {
+        e.preventDefault();
+        setIsShortcutsOpen((open) => !open);
+        return;
+      }
+      if (key === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        const here = activeSection !== 'settings' && activeSection !== 'trash' && NEW_ENTRY_SCREENS.includes(activeSubOption);
+        requestNewEntry(here);
+        if (!here) {
+          setActiveSection('sales');
+          setActiveSubOption('sale_voucher');
+        }
+        return;
+      }
+      const jump = JUMP_KEYS[key];
+      if (jump && !e.shiftKey) {
+        e.preventDefault();
+        setActiveSection(jump[0]);
+        if (jump[1]) setActiveSubOption(jump[1]);
+      }
+    };
+    // Capture phase, so it runs before (and can cancel) the focused field's own handling.
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isAuthenticated, loading, activeSection, activeSubOption]);
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -130,10 +186,14 @@ export function App() {
   const handleCreateSaleReturn = async (input: any) => {
     const res = await createSaleReturn(input);
     if (res.success && res.voucher) {
+      const credited = (res.voucher.creditApplied || []).reduce((acc, c) => acc + c.amount, 0);
+      const owedBack = res.voucher.totalAmount - credited;
       addToast(
         'success',
         `Return Slip ${res.voucher.returnNo} Recorded`,
-        `Restored ${res.voucher.totalQuantity} units into ${res.voucher.warehouseName}.`
+        `Restored ${res.voucher.totalQuantity} units into ${res.voucher.warehouseName}.` +
+          (credited > 0 ? ` ${formatPKR(credited)} taken off ${res.voucher.customerName}'s balance.` : '') +
+          (owedBack > 0.009 ? ` ${formatPKR(owedBack)} is more than they owed (refund / credit).` : '')
       );
     } else {
       addToast('error', 'Return Processing Failed', res.error);
@@ -144,10 +204,17 @@ export function App() {
   const handleRecordCustomerPayment = async (input: any) => {
     const res = await recordCustomerPayment(input);
     if (res.success && res.voucher) {
+      const paid = Number(input.amount) || 0;
+      const discounted = res.discounted || 0;
       addToast(
         'success',
-        `Payment Recorded: ${res.voucher.invoiceNo}`,
-        `Credited ${formatPKR(Number(input.amount) || 0)} from ${res.voucher.customerName}.`
+        `${discounted > 0 && paid <= 0 ? 'Balance Forgiven' : 'Payment Recorded'}: ${res.voucher.invoiceNo}`,
+        [
+          paid > 0 ? `Received ${formatPKR(paid)} from ${res.voucher.customerName}.` : '',
+          discounted > 0 ? `${formatPKR(discounted)} recorded as discount — invoice settled.` : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
       );
     } else {
       addToast('error', 'Payment Failed', res.error);
@@ -158,13 +225,30 @@ export function App() {
   const handleRecordCustomerAccountPayment = async (input: any) => {
     const res = await recordCustomerAccountPayment(input);
     if (res.success) {
+      const paid = Number(input.amount) || 0;
+      const discounted = res.discounted || 0;
       addToast(
         'success',
         `Account Payment Recorded: ${input.customerName}`,
-        `Allocated ${formatPKR(Number(input.amount) || 0)} across ${res.paidInvoicesCount} invoices.`
+        [
+          paid > 0 ? `Allocated ${formatPKR(paid)} across ${res.paidInvoicesCount} invoices.` : '',
+          discounted > 0 ? `${formatPKR(discounted)} recorded as discount.` : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
       );
     } else {
       addToast('error', 'Payment Allocation Failed', res.error);
+    }
+    return res;
+  };
+
+  const handleRemoveDiscount = async (voucherId: string, recordId: string) => {
+    const res = await removeInvoiceDiscount(voucherId, recordId);
+    if (res.success && res.voucher) {
+      addToast('info', `Discount undone: ${res.voucher.invoiceNo}`, `${formatPKR(res.voucher.dueAmount || 0)} is due again.`);
+    } else {
+      addToast('error', 'Could Not Undo Discount', res.error);
     }
     return res;
   };
@@ -317,32 +401,6 @@ export function App() {
   return (
     <TrashActionsContext.Provider value={handleTrashVoucher}>
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      {/* "What's New" banner after an update */}
-      {showUpdateBanner && (
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 text-white px-4 py-2.5 text-xs">
-          <div className="max-w-7xl mx-auto flex items-center gap-3">
-            <Sparkles className="w-4 h-4 text-emerald-300 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <span className="font-bold">Updated to v{CURRENT_APP_VERSION}.</span>{' '}
-              <span className="text-slate-200">{RELEASE_HIGHLIGHTS.join(' • ')}</span>
-            </div>
-            <button
-              onClick={() => setIsChangelogOpen(true)}
-              className="flex-shrink-0 px-3 py-1 rounded-lg bg-white text-slate-900 font-semibold hover:bg-emerald-50 cursor-pointer"
-            >
-              See what's new
-            </button>
-            <button
-              onClick={markChangelogSeen}
-              className="flex-shrink-0 p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
-              title="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Apple-style Navigation Header */}
       <Header
         activeSection={activeSection}
@@ -351,6 +409,7 @@ export function App() {
         onSelectSubOption={(sub) => setActiveSubOption(sub)}
         onClearData={handleClearData}
         onOpenChangelog={() => setIsChangelogOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
         trashCount={trash.length}
       />
 
@@ -396,6 +455,7 @@ export function App() {
                 saleReturns={saleReturns}
                 onRecordPayment={handleRecordCustomerPayment}
                 onRecordAccountPayment={handleRecordCustomerAccountPayment}
+                onRemoveDiscount={handleRemoveDiscount}
               />
             )}
             {activeSubOption === 'monthly_sales' && (
@@ -494,8 +554,13 @@ export function App() {
       {/* Toast Feedback */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* What's New in v1.0.4 Changelog Modal */}
-      <ChangelogModal isOpen={isChangelogOpen} onClose={handleCloseChangelog} />
+      {/* "What's new in this update" popup */}
+      <ChangelogModal
+        isOpen={isChangelogOpen}
+        onClose={handleCloseChangelog}
+        onShowShortcuts={() => setIsShortcutsOpen(true)}
+      />
+      <ShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
     </div>
     </TrashActionsContext.Provider>
   );

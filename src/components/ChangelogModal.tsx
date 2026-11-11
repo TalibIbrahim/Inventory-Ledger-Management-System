@@ -1,33 +1,30 @@
 import React, { useEffect } from 'react';
-import {
-  X,
-  Sparkles,
-  Cloud,
-  Trash2,
-  HardDrive,
-  Zap,
-  ShieldCheck,
-  Command,
-  ArrowRight,
-} from 'lucide-react';
+import { X, Sparkles, BadgePercent, Banknote, RotateCcw, BarChart3, Keyboard, ArrowRight, ShieldCheck } from 'lucide-react';
+import { SHORTCUTS } from '../utils/shortcuts';
 
-export const CURRENT_APP_VERSION = '1.0.10';
-
-// One-line highlights for the "Updated" banner shown at the top after an update.
-export const RELEASE_HIGHLIGHTS = [
-  'Your data now saves to the database (demo data removed)',
-  'Reliable cloud sync',
-  'Trash & Restore for vouchers',
-  'Automatic backups',
-];
+export const CURRENT_APP_VERSION = '1.0.11';
 export const CHANGELOG_STORAGE_KEY = 'axiom_last_seen_changelog_version';
 
 interface ChangelogModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onShowShortcuts?: () => void;
 }
 
-export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose }) => {
+export const KeyCaps: React.FC<{ keys: string[] }> = ({ keys }) => (
+  <span className="inline-flex items-center gap-1 flex-shrink-0">
+    {keys.map((k) => (
+      <kbd
+        key={k}
+        className="min-w-[22px] text-center font-mono text-[10px] font-semibold bg-white text-slate-700 px-1.5 py-0.5 rounded-md border border-slate-300 shadow-[0_1px_0_rgba(15,23,42,0.15)]"
+      >
+        {k}
+      </kbd>
+    ))}
+  </span>
+);
+
+export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose, onShowShortcuts }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -40,63 +37,58 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
 
   if (!isOpen) return null;
 
-  const isMac =
-    typeof navigator !== 'undefined' &&
-    (navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
-      navigator.userAgent.toUpperCase().indexOf('MAC') >= 0);
-
-  const modKey = isMac ? '⌘' : 'Ctrl';
-
   const features = [
     {
-      icon: <ShieldCheck className="w-5 h-5 text-emerald-600" />,
-      bg: 'bg-emerald-50 border-emerald-100',
-      title: 'Your Data Now Saves to the Database',
-      description:
-        'Fixed a problem where the app ran in demo mode and showed sample purchases and warehouses. Your own entries have been moved into the real database automatically, and the demo data is gone.',
-      shortcut: 'Automatic',
-    },
-    {
-      icon: <Cloud className="w-5 h-5 text-blue-600" />,
-      bg: 'bg-blue-50 border-blue-100',
-      title: 'Reliable Cloud Sync',
-      description:
-        'Everything syncs to your MongoDB cloud a few seconds after each change and every minute in the background — including edits and deletions. Test your connection and see the last sync time in Settings.',
-      shortcut: 'Settings → Cloud',
-    },
-    {
-      icon: <Trash2 className="w-5 h-5 text-red-600" />,
-      bg: 'bg-red-50 border-red-100',
-      title: 'Trash & Restore for Vouchers',
-      description:
-        'Open any purchase, sale, return, opening stock or adjustment slip and choose "Move to Trash". Its stock movements are reversed. Changed your mind? Restore it from the Trash with one click.',
-      shortcut: 'Header → Trash',
-    },
-    {
-      icon: <HardDrive className="w-5 h-5 text-indigo-600" />,
-      bg: 'bg-indigo-50 border-indigo-100',
-      title: 'Automatic Local Backups',
-      description:
-        'A full backup is saved on this Mac when the app starts and every 4 hours (the last 60 are kept). You can also back up or restore manually from Settings.',
-      shortcut: 'Settings → Backups',
-    },
-    {
-      icon: <Zap className="w-5 h-5 text-amber-600" />,
-      bg: 'bg-amber-50 border-amber-100',
-      title: 'Stock Adjustments Are Saved Properly',
-      description:
-        'Stock adjustment vouchers are now saved permanently. Voucher and ledger numbers can no longer repeat.',
-      shortcut: 'Fixed',
-    },
-    {
-      icon: <Sparkles className="w-5 h-5 text-purple-600" />,
+      icon: <BadgePercent className="w-5 h-5 text-purple-600" />,
       bg: 'bg-purple-50 border-purple-100',
-      title: 'Updates Install Themselves',
+      title: 'Customer Paid Less? Forgive the Rest',
       description:
-        'When a new version is ready you\'ll see a "Restart To Update" banner. After each update, a banner at the top shows what\'s new.',
-      shortcut: 'Auto',
+        'Bill was Rs. 1,500 but you agreed on Rs. 1,000? In Customer Accounts → Record Payment, enter 1,000 and tick "Forgive the remaining Rs. 500". The bill closes, Cash Collected shows 1,000, and the 500 is listed as a discount. Changed your mind? Press Undo on the customer ledger.',
+      where: 'Customer Accounts',
+    },
+    {
+      icon: <Banknote className="w-5 h-5 text-blue-600" />,
+      bg: 'bg-blue-50 border-blue-100',
+      title: 'Part Payments on New Bills',
+      description:
+        'When creating a sale invoice you can now choose "Part Paid" and enter what the customer paid now. The rest is tracked as due automatically.',
+      where: 'Sale Invoice',
+    },
+    {
+      icon: <Sparkles className="w-5 h-5 text-emerald-600" />,
+      bg: 'bg-emerald-50 border-emerald-100',
+      title: 'Discount on the Bill',
+      description:
+        'Give a discount while making the bill (in rupees, or tap 5% / 10%). The slip shows subtotal, discount and total.',
+      where: 'Sale Invoice',
+    },
+    {
+      icon: <BarChart3 className="w-5 h-5 text-indigo-600" />,
+      bg: 'bg-indigo-50 border-indigo-100',
+      title: 'Reports Show the True Numbers',
+      description:
+        'Monthly and sales reports now show Gross Sales, Discounts, Returns and Net Revenue separately. Cash Collected counts only money actually received.',
+      where: 'Reports',
+    },
+    {
+      icon: <RotateCcw className="w-5 h-5 text-amber-600" />,
+      bg: 'bg-amber-50 border-amber-100',
+      title: 'Returns Reduce What the Customer Owes',
+      description:
+        "A new sale return now takes its value off the customer's unpaid bills (the linked invoice first). Returns entered before this update are left as they were.",
+      where: 'Sale Returns',
+    },
+    {
+      icon: <ShieldCheck className="w-5 h-5 text-slate-600" />,
+      bg: 'bg-slate-50 border-slate-200',
+      title: 'Your Existing Data Is Untouched',
+      description:
+        'All your bills, payments and reports from before the update read exactly as they did. Nothing was changed or removed.',
+      where: 'Safe',
     },
   ];
+
+  const quickKeys = SHORTCUTS.filter((s) => s.group === 'Work faster');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
@@ -110,13 +102,11 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 mb-3">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>What's New in v{CURRENT_APP_VERSION}</span>
+                <span>What's new in this update · v{CURRENT_APP_VERSION}</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                Axiom Stock Ledger
-              </h2>
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Discounts, Part Payments & Shortcuts</h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md">
-                Automatic updates, customer credit ledger, monthly sales reports, and smarter payment tracking — all designed to save you time.
+                Record what the customer really paid, keep reports accurate, and work faster from the keyboard.
               </p>
             </div>
 
@@ -132,57 +122,54 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
         {/* Feature Cards List */}
         <div className="p-6 overflow-y-auto space-y-3.5 bg-slate-50/50">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {features.map((item, idx) => (
+            {features.map((item) => (
               <div
-                key={idx}
-                className="p-4 rounded-2xl bg-white border border-slate-200/70 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between"
+                key={item.title}
+                className="p-4 rounded-2xl bg-white border border-slate-200/70 shadow-2xs flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className={`p-2 rounded-xl border ${item.bg}`}>
-                      {item.icon}
-                    </div>
-                    {item.shortcut && (
-                      <kbd className="px-2 py-0.5 text-[10px] font-mono font-semibold bg-slate-100 text-slate-700 rounded-md border border-slate-200">
-                        {item.shortcut}
-                      </kbd>
-                    )}
+                    <div className={`p-2 rounded-xl border ${item.bg}`}>{item.icon}</div>
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded-md border border-slate-200">
+                      {item.where}
+                    </span>
                   </div>
-                  <h4 className="text-xs font-bold text-slate-900 tracking-tight">
-                    {item.title}
-                  </h4>
-                  <p className="text-[11px] text-slate-500 leading-relaxed mt-1">
-                    {item.description}
-                  </p>
+                  <h4 className="text-xs font-bold text-slate-900 tracking-tight">{item.title}</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed mt-1">{item.description}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Quick Shortcuts Cheatsheet Box */}
+          {/* Keyboard shortcuts */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/60 to-indigo-50/60 border border-blue-100/80">
-            <div className="flex items-center gap-2 mb-2 text-blue-900 font-semibold text-xs">
-              <Command className="w-4 h-4 text-blue-600" />
-              <span>Keyboard Shortcuts Cheatsheet</span>
+            <div className="flex items-center justify-between gap-2 mb-2.5">
+              <div className="flex items-center gap-2 text-blue-900 font-semibold text-xs">
+                <Keyboard className="w-4 h-4 text-blue-600" />
+                <span>New: Keyboard Shortcuts</span>
+              </div>
+              {onShowShortcuts && (
+                <button
+                  onClick={onShowShortcuts}
+                  className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 cursor-pointer"
+                >
+                  See all →
+                </button>
+              )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-700 font-medium">
-              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-blue-100">
-                <span>Focus Search</span>
-                <kbd className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
-                  {modKey}+K
-                </kbd>
-              </div>
-              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-blue-100">
-                <span>Add Next Item</span>
-                <kbd className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
-                  Enter
-                </kbd>
-              </div>
-              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-blue-100">
-                <span>Dismiss / Close</span>
-                <kbd className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
-                  Escape
-                </kbd>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-700 font-medium">
+              {quickKeys.map((s) => (
+                <div
+                  key={s.label}
+                  className="flex items-center justify-between gap-2 bg-white/80 px-2.5 py-1.5 rounded-lg border border-blue-100"
+                >
+                  <span>{s.label}</span>
+                  <KeyCaps keys={s.keys} />
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-2 bg-white/80 px-2.5 py-1.5 rounded-lg border border-blue-100">
+                <span>Jump between screens</span>
+                <KeyCaps keys={[SHORTCUTS[5].keys[0], '1–8']} />
               </div>
             </div>
           </div>
@@ -191,13 +178,13 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
         {/* Modal Footer */}
         <div className="p-4 sm:p-5 bg-white border-t border-slate-100 flex items-center justify-between gap-3">
           <span className="text-[11px] text-slate-400 hidden sm:inline">
-            You can review this changelog anytime from Settings or the top bar.
+            You can open this again from the "What's New" badge at the top.
           </span>
           <button
             onClick={onClose}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm active:scale-[0.98] transition-all"
           >
-            <span>Got it, let's explore!</span>
+            <span>Got it</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

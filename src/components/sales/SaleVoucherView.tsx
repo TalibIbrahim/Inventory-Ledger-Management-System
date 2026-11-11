@@ -2,6 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Product, Warehouse, SaleVoucher } from '../../types/inventory';
 import { formatPKR } from '../../utils/currency';
 import {
+  getDue,
+  getGrossAmount,
+  getInvoiceDiscount,
+  getPaid,
+  getReturnCredit,
+  getSettlementDiscount,
+} from '../../utils/saleMath';
+import {
   PlusCircle,
   FileText,
   Building2,
@@ -34,6 +42,7 @@ import {
 } from '../../utils/voucherDrafts';
 
 import { MoveToTrashButton } from '../trash/MoveToTrashButton';
+import { useNewEntryShortcut } from '../../utils/shortcuts';
 interface SaleVoucherViewProps {
   products: Product[];
   warehouses: Warehouse[];
@@ -49,6 +58,7 @@ interface SaleVoucherViewProps {
     paidAmount?: number;
     paymentMethod?: string;
     dueDate?: string;
+    invoiceDiscount?: number;
   }) => Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }>;
   getProductStockAtWarehouse: (productId: string, warehouseId?: string) => number;
 }
@@ -74,14 +84,16 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || '');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
-  const [recordedBy, setRecordedBy] = useState('Kamran Hashmi');
+  const [recordedBy, setRecordedBy] = useState('Ali');
   const [errorMsg, setErrorMsg] = useState('');
   const [validationErrors, setValidationErrors] = useState<VoucherValidationResult | null>(null);
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
   // Payment Tracking Form State
-  const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'PAYMENT_DUE'>('PAID');
+  const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'PARTIAL' | 'PAYMENT_DUE'>('PAID');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [paidNow, setPaidNow] = useState('');
+  const [discount, setDiscount] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 15);
@@ -113,9 +125,9 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       if (draft.date) setDate(draft.date);
       setNotes(draft.notes || '');
       if (draft.recordedBy) setRecordedBy(draft.recordedBy);
-      if (draft.paymentStatus === 'PAID' || draft.paymentStatus === 'PAYMENT_DUE') {
-        setPaymentStatus(draft.paymentStatus);
-      }
+      if (draft.paymentStatus) setPaymentStatus(draft.paymentStatus);
+      setPaidNow(draft.paidAmount || '');
+      setDiscount(draft.discount || '');
       if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
       if (draft.dueDate) setDueDate(draft.dueDate);
       if (draft.lineItems && draft.lineItems.length > 0) {
@@ -128,6 +140,10 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     setIsModalOpen(true);
   };
 
+  useNewEntryShortcut(() => {
+    if (!isModalOpen) handleOpenModal();
+  });
+
   const handleDiscardDraft = () => {
     clearVoucherDraft(DRAFT_STORAGE_KEYS.SALE_VOUCHER);
     setHasRestoredDraft(false);
@@ -137,6 +153,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     setNotes('');
     setPaymentStatus('PAID');
     setPaymentMethod('CASH');
+    setPaidNow('');
+    setDiscount('');
     const d = new Date();
     d.setDate(d.getDate() + 15);
     setDueDate(d.toISOString().slice(0, 10));
@@ -164,6 +182,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       paymentStatus,
       paymentMethod,
       dueDate,
+      paidAmount: paidNow,
+      discount,
     });
   }, [
     isModalOpen,
@@ -176,6 +196,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     paymentStatus,
     paymentMethod,
     dueDate,
+    paidNow,
+    discount,
   ]);
 
   // Keyboard Shortcuts: Ctrl/Cmd+K to focus search, Escape to close modal
@@ -205,7 +227,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   };
 
   const handleLineKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       if (index === lineItems.length - 1) {
         handleAddLine();
@@ -278,11 +300,24 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
   });
 
   // Calculate live modal total
-  const formTotalAmount = lineItems.reduce((acc, line) => {
+  const formSubtotal = lineItems.reduce((acc, line) => {
     const qty = Number(line.quantity) || 0;
     const price = Number(line.unitPrice) || 0;
     return acc + qty * price;
   }, 0);
+  const discountValue = Math.max(0, Number(discount) || 0);
+  const formTotalAmount = Math.max(0, formSubtotal - discountValue);
+  const paidNowValue = Math.max(0, Number(paidNow) || 0);
+  const discountError =
+    discountValue > 0 && discountValue >= formSubtotal ? 'Discount must be less than the bill amount.' : '';
+  const paidNowError =
+    paymentStatus !== 'PARTIAL'
+      ? ''
+      : paidNowValue <= 0
+        ? 'Enter the amount paid now.'
+        : paidNowValue >= formTotalAmount
+          ? 'That covers the full bill — choose "Paid in Full" instead.'
+          : '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,6 +337,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       return;
     }
 
+    if (discountError || paidNowError) {
+      setErrorMsg(discountError || paidNowError);
+      return;
+    }
+
     setValidationErrors(null);
 
     const payload = {
@@ -316,8 +356,10 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
       notes: notes.trim(),
       recordedBy: recordedBy.trim() || 'Billing Officer',
       paymentStatus,
-      paymentMethod: paymentStatus === 'PAID' ? paymentMethod : 'CREDIT',
-      dueDate: paymentStatus === 'PAYMENT_DUE' ? dueDate : undefined,
+      paymentMethod: paymentStatus === 'PAYMENT_DUE' ? 'CREDIT' : paymentMethod,
+      paidAmount: paymentStatus === 'PARTIAL' ? paidNowValue : undefined,
+      dueDate: paymentStatus === 'PAID' ? undefined : dueDate,
+      invoiceDiscount: discountValue > 0 ? discountValue : undefined,
     };
 
     const res = await onCreateVoucher(payload);
@@ -335,6 +377,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
     setNotes('');
     setPaymentStatus('PAID');
     setPaymentMethod('CASH');
+    setPaidNow('');
+    setDiscount('');
     if (res.voucher) {
       setSelectedInvoice(res.voucher);
     }
@@ -442,7 +486,7 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search invoice #, customer, item... (Ctrl+K)"
+            placeholder="Search invoice #, customer, item..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-3 pr-14 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all"
@@ -474,8 +518,8 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
             className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 cursor-pointer"
           >
             <option value="ALL">All Payment Statuses</option>
-            <option value="PAID">Paid (Cash on Hand)</option>
-            <option value="PAYMENT_DUE">Payment Due (Pending)</option>
+            <option value="PAID">Paid / Settled</option>
+            <option value="PAYMENT_DUE">Balance Due (incl. part paid)</option>
           </select>
 
           {isFiltered && (
@@ -586,7 +630,11 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Paid ({sv.paymentMethod === 'BANK_TRANSFER' ? 'Bank' : 'Cash'})</span>
+                          <span>
+                            {getSettlementDiscount(sv) > 0
+                              ? 'Settled (Discount)'
+                              : `Paid (${sv.paymentMethod === 'BANK_TRANSFER' ? 'Bank' : 'Cash'})`}
+                          </span>
                         </span>
                       )}
                     </td>
@@ -924,15 +972,61 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                 </div>
               </div>
 
+              {/* Discount on this bill */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-semibold text-slate-800">Discount on this bill</label>
+                  <p className="text-[11px] text-slate-500">Optional. Agreed with the customer at billing time.</p>
+                </div>
+                <div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">Rs.</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="0"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      className={`w-full pl-9 pr-3 py-1.5 text-xs bg-white border rounded-xl focus:outline-none focus:ring-2 text-right font-mono ${
+                        discountError ? 'border-red-400 focus:ring-red-500/20' : 'border-slate-200 focus:ring-blue-500/20'
+                      }`}
+                    />
+                  </div>
+                  {discountError && <p className="text-[10px] text-rose-600 mt-1 font-medium">{discountError}</p>}
+                </div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {[5, 10].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setDiscount(String(Math.round((formSubtotal * pct) / 100)))}
+                      className="px-2 py-1 text-[10px] rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  {discountValue > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDiscount('')}
+                      className="px-2 py-1 text-[10px] rounded-lg text-slate-500 hover:bg-slate-100"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Payment Option & Settlement Terms */}
               <div className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="block text-xs font-semibold text-slate-800">
-                      Payment Terms & Collection Status <span className="text-red-500">*</span>
+                      How is the customer paying? <span className="text-red-500">*</span>
                     </label>
                     <p className="text-[11px] text-slate-500">
-                      Specify whether payment was received upfront or if delivery is dispatched with payment due.
+                      Whatever isn't paid now is tracked in Customer Accounts.
                     </p>
                   </div>
                   <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-200/70 text-slate-600 font-semibold">
@@ -940,76 +1034,87 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentStatus('PAID')}
-                    className={`p-3 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
-                      paymentStatus === 'PAID'
-                        ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
-                        : 'bg-white border-slate-200 hover:bg-slate-50/80 text-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        paymentStatus === 'PAID'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-500'
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  {(
+                    [
+                      {
+                        value: 'PAID',
+                        title: 'Paid in Full',
+                        hint: 'Full bill received now.',
+                        icon: <CheckCircle2 className="w-4 h-4" />,
+                        on: 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-500/20 text-emerald-950',
+                        dot: 'bg-emerald-600',
+                      },
+                      {
+                        value: 'PARTIAL',
+                        title: 'Part Paid',
+                        hint: 'Some paid now, rest later.',
+                        icon: <Banknote className="w-4 h-4" />,
+                        on: 'bg-blue-50/90 border-blue-300 ring-2 ring-blue-500/20 text-blue-950',
+                        dot: 'bg-blue-600',
+                      },
+                      {
+                        value: 'PAYMENT_DUE',
+                        title: 'Payment Due',
+                        hint: 'Nothing paid now.',
+                        icon: <Clock className="w-4 h-4" />,
+                        on: 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-500/20 text-amber-950',
+                        dot: 'bg-amber-600',
+                      },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setPaymentStatus(opt.value)}
+                      className={`p-3 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                        paymentStatus === opt.value
+                          ? `${opt.on} shadow-xs`
+                          : 'bg-white border-slate-200 hover:bg-slate-50/80 text-slate-700'
                       }`}
                     >
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold flex items-center gap-1.5">
-                        <span>Paid (Cash on Hand)</span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-medium">
-                          Settled
-                        </span>
+                      <div
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          paymentStatus === opt.value ? `${opt.dot} text-white shadow-xs` : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {opt.icon}
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Amount received immediately via cash, POS card, or instant bank transfer.
+                      <div>
+                        <div className="text-xs font-bold">{opt.title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{opt.hint}</div>
                       </div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentStatus('PAYMENT_DUE')}
-                    className={`p-3 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
-                      paymentStatus === 'PAYMENT_DUE'
-                        ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-500/20 text-amber-950 shadow-xs'
-                        : 'bg-white border-slate-200 hover:bg-slate-50/80 text-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        paymentStatus === 'PAYMENT_DUE'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold flex items-center gap-1.5">
-                        <span>Payment Due (Credit Dispatch)</span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-medium">
-                          Receivable
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Delivery dispatched immediately. Payment arrives late and is tracked in customer accounts.
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+                  ))}
                 </div>
 
-                {paymentStatus === 'PAID' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 items-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 items-start">
+                  {paymentStatus === 'PARTIAL' && (
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                        Settlement Mode
-                      </label>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">Amount paid now</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">Rs.</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="e.g. 1000"
+                          value={paidNow}
+                          onChange={(e) => setPaidNow(e.target.value)}
+                          className={`w-full pl-9 pr-3 py-1.5 text-xs bg-white border rounded-xl focus:outline-none focus:ring-2 text-right font-mono ${
+                            paidNow && paidNowError ? 'border-red-400 focus:ring-red-500/20' : 'border-slate-200 focus:ring-blue-500/20'
+                          }`}
+                        />
+                      </div>
+                      {paidNow && paidNowError && (
+                        <p className="text-[10px] text-rose-600 mt-1 font-medium">{paidNowError}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {paymentStatus !== 'PAYMENT_DUE' && (
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">Paid by</label>
                       <select
                         value={paymentMethod}
                         onChange={(e) => setPaymentMethod(e.target.value)}
@@ -1021,51 +1126,27 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                         <option value="ONLINE">Card / Online Merchant Portal</option>
                       </select>
                     </div>
-                    <div className="flex items-center text-xs text-emerald-800 bg-emerald-100/70 p-2.5 rounded-xl border border-emerald-200">
-                      <span>
-                        Full invoice total of <strong>{formatPKR(formTotalAmount)}</strong> will be credited as settled cash.
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 items-center">
+                  )}
+
+                  {paymentStatus !== 'PAID' && (
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] font-medium text-slate-600">Expected Due Date</label>
+                        <label className="block text-[11px] font-medium text-slate-600">Rest due by</label>
                         <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const d = new Date();
-                              d.setDate(d.getDate() + 7);
-                              setDueDate(d.toISOString().slice(0, 10));
-                            }}
-                            className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
-                          >
-                            Net 7
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const d = new Date();
-                              d.setDate(d.getDate() + 15);
-                              setDueDate(d.toISOString().slice(0, 10));
-                            }}
-                            className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
-                          >
-                            Net 15
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const d = new Date();
-                              d.setDate(d.getDate() + 30);
-                              setDueDate(d.toISOString().slice(0, 10));
-                            }}
-                            className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
-                          >
-                            Net 30
-                          </button>
+                          {[7, 15, 30].map((days) => (
+                            <button
+                              key={days}
+                              type="button"
+                              onClick={() => {
+                                const d = new Date();
+                                d.setDate(d.getDate() + days);
+                                setDueDate(d.toISOString().slice(0, 10));
+                              }}
+                              className="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
+                            >
+                              Net {days}
+                            </button>
+                          ))}
                         </div>
                       </div>
                       <input
@@ -1075,14 +1156,36 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                         className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                       />
                     </div>
-                    <div className="flex items-center text-xs text-amber-900 bg-amber-100/70 p-2.5 rounded-xl border border-amber-200">
+                  )}
+
+                  <div
+                    className={`sm:col-span-2 flex items-center text-xs p-2.5 rounded-xl border ${
+                      paymentStatus === 'PAID'
+                        ? 'text-emerald-800 bg-emerald-100/70 border-emerald-200'
+                        : 'text-amber-900 bg-amber-100/70 border-amber-200'
+                    }`}
+                  >
+                    {paymentStatus === 'PAID' ? (
                       <span>
-                        Outstanding balance of <strong>{formatPKR(formTotalAmount)}</strong> will be tracked under{' '}
-                        <strong>{customerName || 'Customer'}</strong>'s account.
+                        <strong>{formatPKR(formTotalAmount)}</strong> received now. Nothing left to collect.
                       </span>
-                    </div>
+                    ) : (
+                      <span>
+                        {paymentStatus === 'PARTIAL' && (
+                          <>
+                            <strong>{formatPKR(Math.min(paidNowValue, formTotalAmount))}</strong> received now.{' '}
+                          </>
+                        )}
+                        <strong>
+                          {formatPKR(
+                            Math.max(0, formTotalAmount - (paymentStatus === 'PARTIAL' ? paidNowValue : 0))
+                          )}
+                        </strong>{' '}
+                        will be due on <strong>{customerName || 'the customer'}</strong>'s account.
+                      </span>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Total & Notes */}
@@ -1099,7 +1202,12 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                 </div>
 
                 <div className="text-right sm:ml-auto">
-                  <div className="text-xs text-slate-500 font-medium">Grand Invoice Total</div>
+                  {discountValue > 0 && (
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      {formatPKR(formSubtotal)} − {formatPKR(discountValue)} discount
+                    </div>
+                  )}
+                  <div className="text-xs text-slate-500 font-medium">Bill Total</div>
                   <div className="text-2xl font-bold font-mono text-blue-600">
                     {formatPKR(formTotalAmount)}
                   </div>
@@ -1187,26 +1295,41 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                       </span>
                     ) : selectedInvoice.paymentStatus === 'PARTIAL' ? (
                       <span className="text-blue-700 font-bold inline-flex items-center gap-1">
-                        <Banknote className="w-3.5 h-3.5" /> Partially Paid (Due: {formatPKR(selectedInvoice.dueAmount || 0)})
+                        <Banknote className="w-3.5 h-3.5" /> Partially Paid (Due: {formatPKR(getDue(selectedInvoice))})
+                        {selectedInvoice.dueDate && ` • Due by ${selectedInvoice.dueDate}`}
                       </span>
                     ) : (
                       <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Settled — Paid on Hand ({selectedInvoice.paymentMethod || 'Cash'})
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+                        {getPaid(selectedInvoice) > 0 && ` — Paid (${selectedInvoice.paymentMethod || 'Cash'})`}
+                        {getSettlementDiscount(selectedInvoice) > 0 && ' • includes discount'}
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="col-span-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                  <div>
-                    <div className="text-[11px] text-slate-400 uppercase font-medium">Amount Received</div>
-                    <div className="text-xs font-mono font-semibold text-emerald-700 mt-0.5">
-                      {formatPKR(selectedInvoice.paidAmount ?? (selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? 0 : selectedInvoice.totalAmount))}
+                <div className="col-span-2 pt-2 border-t border-slate-200/60 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div>
+                      <div className="text-[11px] text-slate-400 uppercase font-medium">Amount Received</div>
+                      <div className="text-xs font-mono font-semibold text-emerald-700 mt-0.5">
+                        {formatPKR(getPaid(selectedInvoice))}
+                      </div>
                     </div>
+                    {getSettlementDiscount(selectedInvoice) > 0 && (
+                      <div className="text-[11px] text-purple-700 font-mono">
+                        Discount allowed: {formatPKR(getSettlementDiscount(selectedInvoice))}
+                      </div>
+                    )}
+                    {getReturnCredit(selectedInvoice) > 0 && (
+                      <div className="text-[11px] text-slate-600 font-mono">
+                        Cleared by returns: {formatPKR(getReturnCredit(selectedInvoice))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-[11px] text-slate-400 uppercase font-medium">Balance Outstanding</div>
                     <div className="text-xs font-mono font-bold text-amber-700 mt-0.5">
-                      {formatPKR(selectedInvoice.dueAmount ?? (selectedInvoice.paymentStatus === 'PAYMENT_DUE' ? selectedInvoice.totalAmount : 0))}
+                      {formatPKR(getDue(selectedInvoice))}
                     </div>
                   </div>
                 </div>
@@ -1246,6 +1369,22 @@ export const SaleVoucherView: React.FC<SaleVoucherViewProps> = ({
                       ))}
                     </tbody>
                     <tfoot className="bg-slate-50/80 border-t border-slate-200 font-semibold">
+                      {getInvoiceDiscount(selectedInvoice) > 0 && (
+                        <>
+                          <tr>
+                            <td className="py-1.5 px-3 text-slate-500 font-medium" colSpan={3}>Subtotal</td>
+                            <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                              {formatPKR(getGrossAmount(selectedInvoice))}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-1.5 px-3 text-slate-500 font-medium" colSpan={3}>Discount</td>
+                            <td className="py-1.5 px-3 text-right font-mono text-purple-700">
+                              − {formatPKR(getInvoiceDiscount(selectedInvoice))}
+                            </td>
+                          </tr>
+                        </>
+                      )}
                       <tr>
                         <td className="py-2.5 px-3 text-slate-700">Total Net Amount</td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-900">

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { SaleVoucher, SaleReturnVoucher } from '../../types/inventory';
 import { formatPKR } from '../../utils/currency';
+import { getDue, getInvoiceDiscount, getPaid, getSettlementDiscount, recordKind } from '../../utils/saleMath';
 import {
   Users,
   Clock,
@@ -23,6 +24,8 @@ interface CustomerAccountsViewProps {
     referenceNo?: string;
     notes?: string;
     recordedBy: string;
+    waiveRemaining?: boolean;
+    discountReason?: string;
   }) => Promise<{ success: boolean; voucher?: SaleVoucher; error?: string }>;
   onRecordAccountPayment: (input: {
     customerName: string;
@@ -32,7 +35,10 @@ interface CustomerAccountsViewProps {
     referenceNo?: string;
     notes?: string;
     recordedBy: string;
+    waiveRemaining?: boolean;
+    discountReason?: string;
   }) => Promise<{ success: boolean; paidInvoicesCount: number; error?: string }>;
+  onRemoveDiscount: (voucherId: string, recordId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
@@ -40,6 +46,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
   saleReturns,
   onRecordPayment,
   onRecordAccountPayment,
+  onRemoveDiscount,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DUE' | 'SETTLED'>('ALL');
@@ -56,6 +63,8 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [paymentOfficer, _setPaymentOfficer] = useState<string>('Billing Officer');
   const [paymentError, setPaymentError] = useState<string>('');
+  const [waiveRemaining, setWaiveRemaining] = useState(false);
+  const [discountReason, setDiscountReason] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
 
   // Keyboard shortcut Ctrl+K
@@ -83,6 +92,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
         returns: SaleReturnVoucher[];
         totalInvoiced: number;
         totalReturns: number;
+        totalDiscount: number;
         netSales: number;
         totalPaid: number;
         totalDue: number;
@@ -95,8 +105,9 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
     // Process sales invoices
     saleVouchers.forEach((sv) => {
       const name = sv.customerName.trim();
-      const paid = sv.paidAmount ?? (sv.paymentStatus === 'PAYMENT_DUE' ? 0 : sv.totalAmount);
-      const due = sv.dueAmount ?? (sv.paymentStatus === 'PAYMENT_DUE' ? sv.totalAmount : 0);
+      const paid = getPaid(sv);
+      const due = getDue(sv);
+      const forgiven = getSettlementDiscount(sv);
       const isOverdue = due > 0 && sv.dueDate && sv.dueDate < todayStr;
 
       if (!map.has(name)) {
@@ -106,7 +117,8 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
           returns: [],
           totalInvoiced: sv.totalAmount,
           totalReturns: 0,
-          netSales: sv.totalAmount,
+          totalDiscount: forgiven,
+          netSales: sv.totalAmount - forgiven,
           totalPaid: paid,
           totalDue: due,
           lastActivityDate: sv.date,
@@ -117,7 +129,8 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
         const c = map.get(name)!;
         c.invoices.push(sv);
         c.totalInvoiced += sv.totalAmount;
-        c.netSales += sv.totalAmount;
+        c.totalDiscount += forgiven;
+        c.netSales += sv.totalAmount - forgiven;
         c.totalPaid += paid;
         c.totalDue += due;
         if (due > 0) c.unpaidInvoices.push(sv);
@@ -138,6 +151,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
           returns: [sr],
           totalInvoiced: 0,
           totalReturns: sr.totalAmount,
+          totalDiscount: 0,
           netSales: -sr.totalAmount,
           totalPaid: 0,
           totalDue: 0,
@@ -201,6 +215,23 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
     });
   }, [allCustomers, statusFilter, searchQuery]);
 
+  // Balance due on whatever the payment window is applied to (one invoice, or the whole account)
+  const selectedDue = useMemo(() => {
+    const cust = paymentModalCustomer ? customerMap.get(paymentModalCustomer) : undefined;
+    if (!cust) return 0;
+    if (paymentSelectedInvoiceId === 'ALL') return cust.totalDue;
+    const inv = cust.invoices.find((i) => i.id === paymentSelectedInvoiceId);
+    return inv ? getDue(inv) : 0;
+  }, [paymentModalCustomer, paymentSelectedInvoiceId, customerMap]);
+  const enteredAmount = Math.max(0, Number(paymentAmount) || 0);
+  const leftAfterPayment = Math.max(0, Math.round((selectedDue - enteredAmount) * 100) / 100);
+
+  const handleRemoveDiscount = async (invoiceId: string, recordId: string, amount: number) => {
+    if (!window.confirm(`Undo this discount? ${formatPKR(amount)} will be due again.`)) return;
+    const res = await onRemoveDiscount(invoiceId, recordId);
+    if (!res.success) window.alert(res.error || 'Could not undo the discount.');
+  };
+
   // Open Payment Recording modal
   const handleOpenPaymentModal = (customerName: string, preferredInvoiceId = 'ALL') => {
     setPaymentModalCustomer(customerName);
@@ -208,13 +239,15 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
     setPaymentError('');
     setPaymentRef('');
     setPaymentNotes('');
+    setWaiveRemaining(false);
+    setDiscountReason('');
     setPaymentDate(new Date().toISOString().slice(0, 10));
 
     const cust = customerMap.get(customerName);
     if (cust) {
       if (preferredInvoiceId !== 'ALL') {
         const inv = cust.invoices.find((i) => i.id === preferredInvoiceId);
-        const due = inv?.dueAmount ?? (inv?.paymentStatus === 'PAYMENT_DUE' ? inv.totalAmount : 0);
+        const due = inv ? getDue(inv) : 0;
         setPaymentAmount(due > 0 ? due.toString() : '');
       } else {
         setPaymentAmount(cust.totalDue > 0 ? cust.totalDue.toString() : '');
@@ -234,8 +267,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
       setPaymentAmount(cust.totalDue.toString());
     } else {
       const inv = cust.invoices.find((i) => i.id === invId);
-      const due = inv?.dueAmount ?? (inv?.paymentStatus === 'PAYMENT_DUE' ? inv.totalAmount : 0);
-      setPaymentAmount(due.toString());
+      setPaymentAmount((inv ? getDue(inv) : 0).toString());
     }
   };
 
@@ -244,9 +276,13 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
     if (!paymentModalCustomer) return;
     setPaymentError('');
 
-    const amt = Number(paymentAmount);
-    if (isNaN(amt) || amt <= 0) {
+    const amt = paymentAmount.trim() === '' ? 0 : Number(paymentAmount);
+    if (isNaN(amt) || amt < 0 || (amt === 0 && !waiveRemaining)) {
       setPaymentError('Please enter a valid payment amount greater than Rs. 0.');
+      return;
+    }
+    if (amt > selectedDue) {
+      setPaymentError(`Amount is more than the balance due (${formatPKR(selectedDue)}).`);
       return;
     }
 
@@ -262,6 +298,8 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
           referenceNo: paymentRef.trim(),
           notes: paymentNotes.trim(),
           recordedBy: paymentOfficer.trim() || 'Billing Officer',
+          waiveRemaining: waiveRemaining && leftAfterPayment > 0,
+          discountReason: discountReason.trim(),
         });
         if (!res.success) {
           setPaymentError(res.error || 'Failed to record account payment.');
@@ -278,6 +316,8 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
           referenceNo: paymentRef.trim(),
           notes: paymentNotes.trim(),
           recordedBy: paymentOfficer.trim() || 'Billing Officer',
+          waiveRemaining: waiveRemaining && leftAfterPayment > 0,
+          discountReason: discountReason.trim(),
         });
         if (!res.success) {
           setPaymentError(res.error || 'Failed to record invoice payment.');
@@ -306,7 +346,9 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
       debit: number;
       credit: number;
       runningBalance: number;
-      type: 'INVOICE' | 'RETURN' | 'PAYMENT';
+      type: 'INVOICE' | 'RETURN' | 'PAYMENT' | 'DISCOUNT';
+      invoiceId?: string;
+      recordId?: string;
     };
 
     const rows: Array<Omit<LedgerRow, 'runningBalance'>> = [];
@@ -315,7 +357,9 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
       rows.push({
         date: inv.date,
         docNo: inv.invoiceNo,
-        description: `Dispatched ${inv.totalQuantity} units from ${inv.warehouseName} (${inv.items.map((i) => i.productName).join(', ')})`,
+        description: `Dispatched ${inv.totalQuantity} units from ${inv.warehouseName} (${inv.items.map((i) => i.productName).join(', ')})${
+          getInvoiceDiscount(inv) > 0 ? ` — after ${formatPKR(getInvoiceDiscount(inv))} discount on bill` : ''
+        }`,
         debit: inv.totalAmount,
         credit: 0,
         type: 'INVOICE',
@@ -324,6 +368,22 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
       // Payments associated with this invoice
       if (inv.paymentHistory && inv.paymentHistory.length > 0) {
         inv.paymentHistory.forEach((p) => {
+          const kind = recordKind(p);
+          // Return credits are shown once, as the return row below.
+          if (kind === 'RETURN') return;
+          if (kind === 'DISCOUNT') {
+            rows.push({
+              date: p.date,
+              docNo: `DISC-${p.invoiceNo}`,
+              description: `Discount allowed (not cash) — ${p.notes || 'Remaining balance forgiven'}`,
+              debit: 0,
+              credit: p.amount,
+              type: 'DISCOUNT',
+              invoiceId: inv.id,
+              recordId: p.id,
+            });
+            return;
+          }
           rows.push({
             date: p.date,
             docNo: p.referenceNo || `PAY-${p.invoiceNo}`,
@@ -709,7 +769,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                     ⚡ Auto-Allocate across oldest unpaid invoices (Total: {formatPKR(customerMap.get(paymentModalCustomer)?.totalDue || 0)})
                   </option>
                   {customerMap.get(paymentModalCustomer)?.unpaidInvoices.map((inv) => {
-                    const due = inv.dueAmount ?? (inv.paymentStatus === 'PAYMENT_DUE' ? inv.totalAmount : 0);
+                    const due = getDue(inv);
                     return (
                       <option key={inv.id} value={inv.id}>
                         {inv.invoiceNo} ({inv.date}) — Due: {formatPKR(due)}
@@ -727,8 +787,9 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    required
+                    min="0"
+                    step="any"
+                    required={!waiveRemaining}
                     placeholder="Enter amount"
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(e.target.value)}
@@ -771,6 +832,49 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   />
                 </div>
+              </div>
+
+              {/* Forgive the rest (customer paid less and the difference was agreed) */}
+              <div
+                className={`p-3.5 rounded-2xl border space-y-2 transition-colors ${
+                  waiveRemaining ? 'bg-purple-50/80 border-purple-200' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">Left to pay after this</span>
+                  <span className="font-mono font-bold text-slate-900">{formatPKR(leftAfterPayment)}</span>
+                </div>
+                <label
+                  className={`flex items-start gap-2.5 text-xs ${
+                    leftAfterPayment > 0 ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={waiveRemaining && leftAfterPayment > 0}
+                    disabled={leftAfterPayment <= 0}
+                    onChange={(e) => setWaiveRemaining(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-purple-600 cursor-pointer"
+                  />
+                  <span>
+                    <span className="font-semibold text-slate-900">
+                      Forgive the remaining {formatPKR(leftAfterPayment)} as a discount
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Use this when the customer paid less and you agreed. The invoice is closed, only the cash
+                      you actually got counts as collected, and the discount shows separately in reports.
+                    </span>
+                  </span>
+                </label>
+                {waiveRemaining && leftAfterPayment > 0 && (
+                  <input
+                    type="text"
+                    placeholder="Reason (optional), e.g. Agreed price with customer"
+                    value={discountReason}
+                    onChange={(e) => setDiscountReason(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-purple-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  />
+                )}
               </div>
 
               {/* Payment Method & Reference */}
@@ -830,7 +934,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                   className="px-5 py-2.5 text-xs font-semibold rounded-xl bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isSubmittingPayment ? 'Saving...' : 'Confirm Payment Receipt'}</span>
+                  <span>{isSubmittingPayment ? 'Saving...' : waiveRemaining && leftAfterPayment > 0 ? 'Confirm Payment & Discount' : 'Confirm Payment Receipt'}</span>
                 </button>
               </div>
             </form>
@@ -871,7 +975,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
 
             <div className="p-6 overflow-y-auto space-y-6">
               {/* Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
                 <div>
                   <div className="text-[11px] text-slate-500 uppercase font-medium">Total Billed</div>
                   <div className="text-sm font-mono font-bold text-slate-800 mt-0.5">
@@ -882,6 +986,12 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                   <div className="text-[11px] text-slate-500 uppercase font-medium">Returns Credited</div>
                   <div className="text-sm font-mono font-bold text-amber-700 mt-0.5">
                     {formatPKR(statementData.customer.totalReturns)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500 uppercase font-medium">Discounts Allowed</div>
+                  <div className="text-sm font-mono font-bold text-purple-700 mt-0.5">
+                    {formatPKR(statementData.customer.totalDiscount)}
                   </div>
                 </div>
                 <div>
@@ -911,7 +1021,7 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                         <th className="py-2.5 px-3">Doc #</th>
                         <th className="py-2.5 px-3">Transaction Details</th>
                         <th className="py-2.5 px-3 text-right">Debit (Invoice)</th>
-                        <th className="py-2.5 px-3 text-right">Credit (Payment/Ret)</th>
+                        <th className="py-2.5 px-3 text-right">Credit (Payment/Disc/Ret)</th>
                         <th className="py-2.5 px-3 text-right">Running Balance</th>
                       </tr>
                     </thead>
@@ -929,11 +1039,26 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                             <td className="py-2.5 px-3 font-mono font-semibold text-slate-900">
                               {row.docNo}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-700 max-w-xs">{row.description}</td>
+                            <td className="py-2.5 px-3 text-slate-700 max-w-xs">
+                              {row.description}
+                              {row.type === 'DISCOUNT' && row.invoiceId && row.recordId && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDiscount(row.invoiceId!, row.recordId!, row.credit)}
+                                  className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold rounded-md text-purple-700 bg-purple-50 hover:bg-purple-100 print:hidden cursor-pointer"
+                                >
+                                  Undo
+                                </button>
+                              )}
+                            </td>
                             <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-900">
                               {row.debit > 0 ? formatPKR(row.debit) : '—'}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-medium text-emerald-700">
+                            <td
+                              className={`py-2.5 px-3 text-right font-mono font-medium ${
+                                row.type === 'DISCOUNT' ? 'text-purple-700' : 'text-emerald-700'
+                              }`}
+                            >
                               {row.credit > 0 ? formatPKR(row.credit) : '—'}
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
@@ -952,7 +1077,11 @@ export const CustomerAccountsView: React.FC<CustomerAccountsViewProps> = ({
                           {formatPKR(statementData.customer.totalInvoiced)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-emerald-700">
-                          {formatPKR(statementData.customer.totalPaid + statementData.customer.totalReturns)}
+                          {formatPKR(
+                            statementData.customer.totalPaid +
+                              statementData.customer.totalDiscount +
+                              statementData.customer.totalReturns
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-amber-700 text-sm">
                           {formatPKR(statementData.customer.totalDue)}
